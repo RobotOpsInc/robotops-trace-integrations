@@ -27,7 +27,7 @@ This is the third of three repos in the pivot (see
 | Package | Lang / build | Issue | Distributes to | Status |
 |---|---|---|---|---|
 | [`robotops_trace_semconv`](packages/robotops_trace_semconv) | C++ header-only + Python (ament_cmake) | [ROB-430](https://linear.app/robotops/issue/ROB-430) | apt + PyPI | 🟡 stub |
-| [`robotops_trace_rclcpp`](packages/robotops_trace_rclcpp) | C++ (ament_cmake) | [ROB-422](https://linear.app/robotops/issue/ROB-422) | apt | 🟡 stub |
+| [`robotops_trace_rclcpp`](packages/robotops_trace_rclcpp) | C++ (ament_cmake) | [ROB-422](https://linear.app/robotops/issue/ROB-422) | apt | 🟢 first cut |
 | [`robotops_trace_rclpy`](packages/robotops_trace_rclpy) | Python (ament_python) | [ROB-423](https://linear.app/robotops/issue/ROB-423) | apt + PyPI | 🟡 stub |
 | [`robotops_trace_bt_cpp`](packages/robotops_trace_bt_cpp) | C++ (ament_cmake) | [ROB-424](https://linear.app/robotops/issue/ROB-424) | apt | 🟡 stub |
 | [`robotops_trace_ros2_control`](packages/robotops_trace_ros2_control) | C++ (ament_cmake) | [ROB-425](https://linear.app/robotops/issue/ROB-425) | apt | 🟡 stub |

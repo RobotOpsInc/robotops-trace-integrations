@@ -1,4 +1,4 @@
-// Copyright 2025 Robot Ops Inc.
+// Copyright 2026 Robot Ops Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,16 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// ROB-422 STUB — placeholder translation unit so the package produces a real
-// library artifact. Replace with the actual integration in ROB-422.
-
 #include "robotops_trace_rclcpp/robotops_trace_rclcpp.hpp"
 
-namespace robotops::trace {
-
-const char * robotops_trace_rclcpp_version() noexcept
+namespace robotops::trace::rclcpp
 {
-  return "0.1.0";
+
+const char * version() noexcept
+{
+  return "0.2.0";
 }
 
-}  // namespace robotops::trace
+}  // namespace robotops::trace::rclcpp
