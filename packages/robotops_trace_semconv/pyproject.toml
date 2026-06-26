@@ -1,0 +1,23 @@
+# PyPI lane for the semantic-conventions Python mirror (ROB-430).
+# The apt/ROS lane is built by ament_cmake (see CMakeLists.txt); this file
+# packages the SAME robotops_trace_semconv/ module for pip-only users via
+# `python -m build` in the pypi-publish workflow.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "robotops-trace-semconv"
+version = "0.1.0"
+description = "RobotOps Trace semantic conventions — robotics-general attribute keys (Python mirror). STUB (ROB-430)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [{ name = "Robot Ops Inc.", email = "kristophm@robotops.com" }]
+keywords = ["robotops", "tracing", "opentelemetry", "ros2", "semantic-conventions"]
+
+[project.urls]
+Homepage = "https://github.com/RobotOpsInc/robotops-trace-integrations"
+
+[tool.hatch.build.targets.wheel]
+packages = ["robotops_trace_semconv"]

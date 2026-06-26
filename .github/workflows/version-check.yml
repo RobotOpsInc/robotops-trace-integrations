@@ -1,0 +1,83 @@
+name: Version Check
+
+on:
+  pull_request:
+    branches: [development, main]
+
+# Monorepo: validate the version of every package that changed in this PR.
+# Each package owns its package.xml version (source of truth); the shared
+# CHANGELOG.rst must carry a matching entry.
+jobs:
+  check-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed packages
+        id: changed
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          git fetch origin "${{ github.base_ref }}" --depth=1 || true
+
+          CHANGED=""
+          for pkgdir in packages/*/; do
+            pkg=$(basename "$pkgdir")
+            if ! git diff --quiet "$BASE"...HEAD -- "$pkgdir"; then
+              CHANGED="$CHANGED $pkg"
+            fi
+          done
+          CHANGED=$(echo "$CHANGED" | xargs || true)
+          echo "packages=$CHANGED" >> $GITHUB_OUTPUT
+          if [[ -z "$CHANGED" ]]; then
+            echo "No package directories changed in this PR."
+          else
+            echo "Changed packages: $CHANGED"
+          fi
+
+      - name: Validate version + CHANGELOG for each changed package
+        if: steps.changed.outputs.packages != ''
+        run: |
+          set -e
+          FAIL=0
+          for pkg in ${{ steps.changed.outputs.packages }}; do
+            PKG_XML="packages/${pkg}/package.xml"
+            echo "::group::${pkg}"
+
+            VERSION=$(grep -oP '(?<=<version>)[^<]+' "$PKG_XML")
+            echo "Version: $VERSION"
+
+            # Semver format
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::[$pkg] Version '$VERSION' is not valid semver (X.Y.Z)"
+              FAIL=1; echo "::endgroup::"; continue
+            fi
+
+            # Minimum 0.1.0
+            IFS='.' read -r major minor patch <<< "$VERSION"
+            if [[ "$major" -eq 0 && "$minor" -eq 0 ]]; then
+              echo "::error::[$pkg] Version must be >= 0.1.0, got $VERSION"
+              FAIL=1; echo "::endgroup::"; continue
+            fi
+
+            # CHANGELOG entry (shared CHANGELOG.rst, format: 'X.Y.Z (YYYY-MM-DD)')
+            if ! grep -qE "^${VERSION} \([0-9]{4}-[0-9]{2}-[0-9]{2}\)" CHANGELOG.rst; then
+              echo "::error::[$pkg] CHANGELOG.rst missing entry for version ${VERSION}"
+              echo "Expected: '${VERSION} (YYYY-MM-DD)' with a (${pkg}) bullet"
+              FAIL=1; echo "::endgroup::"; continue
+            fi
+
+            # TODO: assert new version > currently-published version once the
+            # apt.robotops.com aptly repo exposes a per-package version query.
+            # rmw_robotops used the Cloudsmith JSON API; the S3/aptly repo has no
+            # equivalent endpoint yet, so this step is format+changelog only.
+
+            echo "✅ [$pkg] version $VERSION OK"
+            echo "::endgroup::"
+          done
+          if [[ "$FAIL" -ne 0 ]]; then
+            echo "::error::One or more packages failed version validation."
+            exit 1
+          fi

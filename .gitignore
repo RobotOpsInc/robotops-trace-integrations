@@ -1,0 +1,54 @@
+# Colcon build artifacts
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Secrets / local env
+*.key
+.env
+.env.local
+
+# Docker
+docker-compose.override.yml
+
+# Compiled objects / libs
+*.o
+*.obj
+*.lo
+*.slo
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.la
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+
+# bloom-generate rosdebian output (produced when building debs locally)
+/debian/
+.obj-*/
+*.deb
+*.ddeb
+*.buildinfo
+*.changes

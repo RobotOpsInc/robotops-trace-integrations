@@ -1,0 +1,81 @@
+name: PyPI Publish
+
+# Publishes the Python-shipping packages to PyPI via OIDC Trusted Publishing
+# (no long-lived token — mirrors the robotops-trace-python lane, spec §2.3/§2.4):
+#   - robotops_trace_rclpy            → PyPI name: robotops-trace-rclpy   (ROB-423)
+#   - robotops_trace_semconv (mirror) → PyPI name: robotops-trace-semconv (ROB-430)
+#
+# Production (main) publishes to PyPI; development publishes to TestPyPI.
+#
+# INFRA PREREQUISITE: a PyPI/TestPyPI Trusted Publisher must be registered for
+# RobotOpsInc/robotops-trace-integrations naming this workflow + each package, and
+# a PyPI org/account must own the robotops-trace-* names. Until that one-time
+# setup exists the publish step will fail at the OIDC exchange — expected (see
+# README "Status"). This is the org's new PyPI lane, first defined here + in
+# robotops-trace-python.
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Which package to publish'
+        type: choice
+        options:
+          - robotops_trace_rclpy
+          - robotops_trace_semconv
+        required: true
+      target:
+        description: 'Publish target'
+        type: choice
+        options:
+          - testpypi
+          - pypi
+        default: testpypi
+        required: true
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # OIDC token for Trusted Publishing
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce target ↔ branch
+        run: |
+          if [[ "${{ inputs.target }}" == "pypi" && "${{ github.ref }}" != "refs/heads/main" ]]; then
+            echo "::error::Production PyPI publish only allowed from main"
+            exit 1
+          fi
+          if [[ "${{ inputs.target }}" == "testpypi" && "${{ github.ref }}" != "refs/heads/development" ]]; then
+            echo "::error::TestPyPI publish only allowed from development"
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build distribution
+        run: |
+          cd packages/${{ inputs.package }}
+          python -m pip install --upgrade build
+          python -m build --outdir "$GITHUB_WORKSPACE/dist"
+
+      - name: List artifacts
+        run: ls -lh dist/
+
+      - name: Publish to TestPyPI
+        if: ${{ inputs.target == 'testpypi' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+
+      - name: Publish to PyPI
+        if: ${{ inputs.target == 'pypi' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

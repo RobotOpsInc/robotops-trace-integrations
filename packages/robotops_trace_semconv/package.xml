@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>robotops_trace_semconv</name>
+  <version>0.1.0</version>
+  <description>
+    RobotOps Trace semantic conventions (ROB-430). Header-only C++ definitions
+    plus a mirrored Python module of the robotics-general attribute keys shared
+    by every RobotOps trace integration (and the rclcpp/rclpy SDK cores). This
+    is the lockstep contract that keeps span attributes consistent across
+    frameworks. STUB — concept-level keys only; real key set lands in ROB-430.
+  </description>
+
+  <maintainer email="kristophm@robotops.com">Kristoph Matthews</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <!-- Header-only + python mirror: no runtime deps. This package is the base
+       of the integrations dependency graph; the SDK cores and the other
+       integration packages depend ON it, not the other way around. -->
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

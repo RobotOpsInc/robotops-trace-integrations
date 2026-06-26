@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>robotops_trace_bt_cpp</name>
+  <version>0.1.0</version>
+  <description>
+    RobotOps Trace integration for BehaviorTree.CPP: tick-callback spans (covers Nav2 + MoveIt Pro), built on the robotops_trace_cpp SDK core.
+    STUB / scaffold — real integration logic lands in ROB-424.
+  </description>
+
+  <maintainer email="kristophm@robotops.com">Kristoph Matthews</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- RobotOps SDK core + shared semantic conventions. Pinned >=0.1.0 to the
+       core's current minor; a core major bump fans out a coordinated bump here
+       (see spec 2.5). NOTE: ros-<distro>-robotops-trace-cpp is NOT yet
+       published to apt, so rosdep resolution WILL fail until the core ships. -->
+  <depend version_gte="0.1.0">robotops_trace_cpp</depend>
+  <depend version_gte="0.1.0">robotops_trace_semconv</depend>
+
+  <!-- Target framework -->
+  <depend>behaviortree_cpp</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
