@@ -17,7 +17,8 @@
 
 #include "robotops_trace_bt_cpp/robotops_trace_bt_cpp.hpp"
 
-namespace robotops::trace {
+namespace robotops::trace
+{
 
 const char * robotops_trace_bt_cpp_version() noexcept
 {

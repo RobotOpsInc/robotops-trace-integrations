@@ -6,8 +6,8 @@ This monorepo contains independently-versioned packages. Each package owns its
 ``package.xml`` version; ``version-check.yml`` runs per changed package. Entries
 below are tagged with the affected package.
 
-robotops_trace_rclcpp 0.2.0 (2026-06-26)
-----------------------------------------
+0.2.0 (2026-06-26)
+------------------
 
 * (robotops_trace_rclcpp) ROB-422: first real rclcpp integration — opt-in,
   fork-free instrumentation for C++ ROS 2 nodes, built on the

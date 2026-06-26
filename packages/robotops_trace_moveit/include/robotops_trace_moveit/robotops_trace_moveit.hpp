@@ -17,7 +17,8 @@
 #ifndef ROBOTOPS_TRACE_MOVEIT__ROBOTOPS_TRACE_MOVEIT_HPP_
 #define ROBOTOPS_TRACE_MOVEIT__ROBOTOPS_TRACE_MOVEIT_HPP_
 
-namespace robotops::trace {
+namespace robotops::trace
+{
 
 /// Returns the package version string. Placeholder until ROB-426.
 const char * robotops_trace_moveit_version() noexcept;

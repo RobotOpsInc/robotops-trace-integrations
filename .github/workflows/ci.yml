@@ -29,11 +29,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # NOTE: this build depends on the robotops-trace-cpp / robotops-trace-python
-      # SDK cores, which are NOT yet published to apt/PyPI. The image build's
-      # rosdep step is non-fatal, but `just ci-inner` (colcon build) WILL fail at
-      # dependency resolution until the cores ship (see README "Status"). The
-      # scaffold is structurally correct; CI is intentionally not faked green.
+      # The C++ SDK core (ros-<distro>-robotops-trace-cpp) is published to the
+      # development apt channel, so PR CI builds against APT_REPO_URL=
+      # https://apt.development.robotops.com (the Dockerfile keeps the prod
+      # apt.robotops.com default for release builds). The Python SDK core
+      # (robotops-trace on PyPI) is not published yet; it is only an exec_depend
+      # of the ament_python robotops_trace_rclpy package, which colcon still
+      # builds without it (the Dockerfile rosdep step --skip-keys it).
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
@@ -44,7 +46,7 @@ jobs:
           load: true
           tags: robotops-trace-integrations:ci-${{ matrix.ros_distro }}
           build-args: |
-            APT_REPO_URL=https://apt.robotops.com
+            APT_REPO_URL=https://apt.development.robotops.com
             ROS_DISTRO=${{ matrix.ros_distro }}
           cache-from: type=gha,scope=${{ matrix.ros_distro }}
           cache-to: type=gha,mode=max,scope=${{ matrix.ros_distro }}

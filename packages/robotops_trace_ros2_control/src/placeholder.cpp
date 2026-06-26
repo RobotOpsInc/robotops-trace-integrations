@@ -17,7 +17,8 @@
 
 #include "robotops_trace_ros2_control/robotops_trace_ros2_control.hpp"
 
-namespace robotops::trace {
+namespace robotops::trace
+{
 
 const char * robotops_trace_ros2_control_version() noexcept
 {

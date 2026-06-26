@@ -17,7 +17,8 @@
 #ifndef ROBOTOPS_TRACE_ROS2_CONTROL__ROBOTOPS_TRACE_ROS2_CONTROL_HPP_
 #define ROBOTOPS_TRACE_ROS2_CONTROL__ROBOTOPS_TRACE_ROS2_CONTROL_HPP_
 
-namespace robotops::trace {
+namespace robotops::trace
+{
 
 /// Returns the package version string. Placeholder until ROB-425.
 const char * robotops_trace_ros2_control_version() noexcept;

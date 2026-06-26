@@ -99,7 +99,7 @@ inline void record_message_info(
 /// timestamp, topic). Use this when you constructed the subscription to receive
 /// `MessageInfo`.
 template<typename MsgT, typename Fn>
-std::function<void(MsgT, const ::rclcpp::MessageInfo & )>
+std::function<void(MsgT, const ::rclcpp::MessageInfo & info)>
 traced_subscription(
   std::string topic, Fn fn)
 {

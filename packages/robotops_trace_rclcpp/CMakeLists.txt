@@ -18,14 +18,16 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 # The SDK core links libcurl (for its OTLP exporter) and re-exports the
-# CURL::libcurl IMPORTED target in its link interface, but its Config.cmake does
-# NOT re-find_package(CURL). So consumers must pull CURL in themselves or the
-# core's exported target fails to resolve. (TODO: upstream a find_dependency(CURL)
-# into robotops_trace_cpp's Config so this is unnecessary once the core ships.)
+# CURL::libcurl IMPORTED target in its link interface. The *published*
+# robotops_trace_cpp 0.1.0 dev deb's Config.cmake does NOT re-find_package(CURL),
+# so this find_package(CURL) is REQUIRED: without it the core's exported target
+# references an undefined CURL::libcurl and the link fails. The fix
+# (find_dependency(CURL) in the core's Config — ROB-438) is merged on the core's
+# development branch but not yet released; once robotops_trace_cpp >= 0.2.0 is the
+# resolved dev deb, this line can be dropped.
 find_package(CURL REQUIRED)
-# RobotOps SDK core (built from source in the combined colcon workspace until
-# ros-<distro>-robotops-trace-cpp is published to apt) + shared semantic
-# conventions.
+# RobotOps SDK core (ros-<distro>-robotops-trace-cpp from the development apt
+# channel) + shared semantic conventions (built from source in this workspace).
 find_package(robotops_trace_cpp REQUIRED)
 find_package(robotops_trace_semconv REQUIRED)
 
