@@ -18,51 +18,58 @@
 /// \file semantic_conventions.hpp
 /// \brief Span-attribute keys used by the rclcpp integration.
 ///
-/// These are CONCEPT-LEVEL keys. The authoritative, cross-framework registry is
-/// `robotops_trace_semconv` (ROB-430); until that package's key set is
-/// finalized, the rclcpp integration carries local constants here.
-///
-/// TODO(ROB-430): delete these locals and import every key from
-///   <robotops_trace_semconv/semconv.hpp>. The `robot.action.result` key is
-///   ALREADY defined there and is re-exported below to prove the lockstep
-///   contract works end-to-end; the rest are added to semconv by ROB-430.
+/// As of ROB-430 the authoritative, cross-framework key registry is
+/// `robotops_trace_semconv`. The keys below are RE-EXPORTED (not redefined) from
+/// that header, so the emitted attribute strings are guaranteed byte-identical
+/// to every other RobotOps integration and to the ROSQL/agent vocabulary. The
+/// `keys::` alias is kept for source compatibility; reach for the semconv
+/// constants directly in new code.
 
 #include <robotops_trace_semconv/semconv.hpp>
 
 namespace robotops::trace::rclcpp::keys
 {
 
-// --- rclcpp_action: the deterministic cross-process correlation keys --------
+namespace semconv = ::robotops::trace::semconv;
+
+// --- keys sourced from the authoritative semconv dictionary (ROB-430) -------
 
 /// The action goal UUID, canonical lowercase 8-4-4-4-12 form (see
-/// `goal_id_to_string`). This is THE join key the correlation agent (ROB-427)
-/// uses to stitch the client-side action span to the server-side action span
-/// across processes. Emitted identically on both sides.
-inline constexpr const char * kRobotActionGoalId = "robot.action.goal_id";
+/// `goal_id_to_string`). THE join key the correlation agent (ROB-427) uses to
+/// stitch the client-side action span to the server-side action span across
+/// processes. Emitted identically on both sides.
+inline constexpr const char * kRobotActionGoalId = semconv::kRobotActionGoalId;
 
 /// The action name (e.g. "/fibonacci").
-inline constexpr const char * kRobotActionName = "robot.action.name";
+inline constexpr const char * kRobotActionName = semconv::kRobotActionName;
 
-/// Terminal result of a goal: "succeeded" | "aborted" | "canceled" | "unknown".
-/// Re-exported from robotops_trace_semconv to demonstrate the ROB-430 contract.
-inline constexpr const char * kRobotActionResult =
-  ::robotops::trace::semconv::kRobotActionResult;
+/// Terminal domain result of a goal (see semconv::action_result values).
+inline constexpr const char * kRobotActionResult = semconv::kRobotActionResult;
+
+/// Topic name a subscription callback fired for.
+inline constexpr const char * kRosTopic = semconv::kRosTopic;
+
+/// Publisher GID (hex) of the received message — from rmw_message_info.
+inline constexpr const char * kRosPublisherGid = semconv::kRosPublisherGid;
+
+/// Source (publish) timestamp in nanoseconds — from rmw_message_info.
+inline constexpr const char * kRosSourceTimestamp = semconv::kRosSourceTimestamp;
+
+// --- rclcpp-local keys NOT (yet) in semconv v0 ------------------------------
+//
+// The dictionary is intentionally minimal and only promotes a key once it has a
+// stable cross-framework meaning. These describe rclcpp_action's server-side
+// accept decision, which has no portable concept-level analogue yet; they stay
+// local here until/unless a future semconv minor adopts them.
 
 /// Server-side accept/reject decision: "accept_and_execute" | "accept_and_defer"
 /// | "reject".
 inline constexpr const char * kRobotActionGoalResponse =
   "robot.action.goal_response";
 
-// --- topic/message content-correlation keys (best-effort, ROB-427) ----------
-
-/// Topic name a subscription callback fired for.
-inline constexpr const char * kRosTopic = "ros.topic";
-
-/// Publisher GID (hex) of the received message — from rmw_message_info.
-inline constexpr const char * kRosPublisherGid = "ros.publisher_gid";
-
-/// Source (publish) timestamp in nanoseconds — from rmw_message_info.
-inline constexpr const char * kRosSourceTimestamp = "ros.source_timestamp";
+/// Whether the server accepted the goal (client-observed). [bool attribute]
+inline constexpr const char * kRobotActionGoalAccepted =
+  "robot.action.goal_accepted";
 
 }  // namespace robotops::trace::rclcpp::keys
 
