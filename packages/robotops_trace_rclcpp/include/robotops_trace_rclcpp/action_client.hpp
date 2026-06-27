@@ -41,10 +41,11 @@ namespace detail
 
 inline const char * result_code_str(::rclcpp_action::ResultCode c) noexcept
 {
+  namespace result = ::robotops::trace::semconv::action_result;
   switch (c) {
-    case ::rclcpp_action::ResultCode::SUCCEEDED: return "succeeded";
-    case ::rclcpp_action::ResultCode::ABORTED: return "aborted";
-    case ::rclcpp_action::ResultCode::CANCELED: return "canceled";
+    case ::rclcpp_action::ResultCode::SUCCEEDED: return result::kSucceeded;
+    case ::rclcpp_action::ResultCode::ABORTED: return result::kAborted;
+    case ::rclcpp_action::ResultCode::CANCELED: return result::kCanceled;
     case ::rclcpp_action::ResultCode::UNKNOWN: return "unknown";
   }
   return "unknown";
@@ -94,7 +95,7 @@ typename ::rclcpp_action::Client<ActionT>::SendGoalOptions trace_send_goal_optio
       auto span = guard.span();
       span.set_attribute(keys::kRobotActionName, action_name);
       const bool accepted = static_cast<bool>(handle);
-      span.set_attribute("robot.action.goal_accepted", accepted);
+      span.set_attribute(keys::kRobotActionGoalAccepted, accepted);
       if (accepted) {
         span.set_attribute(keys::kRobotActionGoalId, goal_id_to_string(handle->get_goal_id()));
       }

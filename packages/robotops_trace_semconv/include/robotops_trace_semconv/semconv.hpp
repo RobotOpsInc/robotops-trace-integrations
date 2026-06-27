@@ -13,17 +13,30 @@
 // limitations under the License.
 
 // ============================================================================
-// RobotOps Trace — Semantic Conventions (ROB-430)  [STUB]
+// RobotOps Trace — Robotics Semantic Conventions v0 (ROB-430)
 // ============================================================================
 //
-// Header-only registry of the robotics-general span/attribute keys shared by
-// every RobotOps trace integration and the SDK cores. Keeping these in ONE
-// header (mirrored by the python module) is the lockstep contract that stops
-// attribute names from drifting across rclcpp/rclpy/bt_cpp/ros2_control/moveit.
+// Header-only registry of the robotics span/attribute keys shared by every
+// RobotOps trace integration (rclcpp/rclpy/BT.CPP/ros2_control/MoveIt) and the
+// SDK cores. This header (mirrored byte-for-byte by the Python module
+// robotops_trace_semconv/__init__.py) is the AUTHORITATIVE source of truth; the
+// human-readable dictionary lives in the design doc
+// (tracehouse-mvp-planning/robotics-semantic-conventions-v0.md).
 //
-// This is a SCAFFOLD. The keys below are concept-level placeholders drawn from
-// the tracing architecture doc; the authoritative key set, value types, and the
-// ROS-to-semconv mapping table are filled in by ROB-430.
+// Two namespaces (see design doc §"Design rules"):
+//   * robot.* — robotics-GENERAL concept keys. Portable; any robot has actions,
+//     transforms, joints, trajectories. This is the durable vocabulary
+//     TraceHouse/ROSQL display + filter on.
+//   * ros.*   — the ROS mapping / implementation keys (topic, gid, message
+//     type). Present only when the transport IS ROS.
+//   * resource attributes (service.name, robot.id) are set once per process on
+//     the OTel resource, not per span.
+//
+// Types (OTel AttributeValue): string, bool, int64, double, or arrays thereof.
+// No nested structs — poses are decomposed into double[] components.
+//
+// v0 is additive-only: new keys may be added; existing key names + value enums
+// are stable. Breaking a key name/enum = a new major.
 
 #ifndef ROBOTOPS_TRACE_SEMCONV__SEMCONV_HPP_
 #define ROBOTOPS_TRACE_SEMCONV__SEMCONV_HPP_
@@ -31,27 +44,138 @@
 namespace robotops::trace::semconv
 {
 
-// --- Concept-level robotics-general keys (TODO ROB-430: finalize) ----------
-//
-// TODO(ROB-430): robot.action.result        — terminal status of an action/goal
-// TODO(ROB-430): robot.transform.parent      — TF parent frame id
-// TODO(ROB-430): robot.transform.child       — TF child frame id
-// TODO(ROB-430): robot.joint.name            — joint identifier
-// TODO(ROB-430): robot.trajectory.point_count — number of points in a trajectory
-//
-// TODO(ROB-430): add the ROS-specific mapping (rclcpp_action goal UUID,
-//                FollowJointTrajectory boundary, BT node name/uid, etc.)
-// TODO(ROB-430): define value types + units and the namespacing scheme.
+// ===========================================================================
+// Resource attributes (set once per process on the OTel resource, NOT per span)
+// ===========================================================================
 
+/// OTel-standard process/node identity. Reuse OTel's key; don't reinvent. [str]
+inline constexpr const char * kServiceName = "service.name";
+/// Robot identity (the agent already stamps RobotId; align the key). [str]
+inline constexpr const char * kRobotId = "robot.id";
+
+// ===========================================================================
+// robot.* — concept keys (portable across frameworks)
+// ===========================================================================
+
+// --- Action (ROS mapping: rclcpp_action / rclpy actions) -------------------
+
+/// Action name, e.g. "navigate_to_pose", "move_action". [str]
+inline constexpr const char * kRobotActionName = "robot.action.name";
+/// Goal UUID, RFC-4122 8-4-4-4-12 lowercase. The deterministic cross-process
+/// join key (ROB-427); emitted identically on client + server. [str]
+inline constexpr const char * kRobotActionGoalId = "robot.action.goal_id";
+/// Lifecycle status enum (see action_status). [str enum]
+inline constexpr const char * kRobotActionStatus = "robot.action.status";
+/// Terminal domain outcome enum (see action_result), distinct from span
+/// status. [str enum]
 inline constexpr const char * kRobotActionResult = "robot.action.result";
-inline constexpr const char * kRobotTransformParent = "robot.transform.parent";
-inline constexpr const char * kRobotTransformChild = "robot.transform.child";
-inline constexpr const char * kRobotJointName = "robot.joint.name";
-inline constexpr const char * kRobotTrajectoryPointCount = "robot.trajectory.point_count";
 
+// --- Work boundary (ROS mapping: executor callback) ------------------------
+
+/// The universal "unit of work" kind enum (see callback_type). [str enum]
+inline constexpr const char * kRobotCallbackType = "robot.callback.type";
+
+// --- Transform (ROS mapping: tf2) ------------------------------------------
+
+/// Parent frame id. [str]
+inline constexpr const char * kRobotTransformParent = "robot.transform.parent";
+/// Child frame id. [str]
+inline constexpr const char * kRobotTransformChild = "robot.transform.child";
+
+// --- Joint (ROS mapping: sensor_msgs/JointState, ros2_control) -------------
+
+/// Joint name(s) involved. [str[]]
+inline constexpr const char * kRobotJointName = "robot.joint.name";
+/// Number of joints. [int64]
+inline constexpr const char * kRobotJointCount = "robot.joint.count";
+
+// --- Trajectory (ROS mapping: trajectory_msgs, FollowJointTrajectory) ------
+
+/// Number of trajectory points. [int64]
+inline constexpr const char * kRobotTrajectoryPointCount =
+  "robot.trajectory.point_count";
+/// Planned trajectory duration in milliseconds. [double]
+inline constexpr const char * kRobotTrajectoryDurationMs =
+  "robot.trajectory.duration_ms";
+
+// --- Target / pose (ROS mapping: geometry_msgs/PoseStamped) ----------------
+
+/// Frame id the target is expressed in. [str]
+inline constexpr const char * kRobotTargetFrame = "robot.target.frame";
+/// Target position [x, y, z] in meters — decomposed, not a struct. [double[]]
+inline constexpr const char * kRobotTargetPosition = "robot.target.position";
+/// Target orientation quaternion [x, y, z, w]. [double[]]
+inline constexpr const char * kRobotTargetOrientation =
+  "robot.target.orientation";
+
+// --- Object (manipulation) -------------------------------------------------
+
+/// Object/target identifier (e.g. a grasp target). [str]
+inline constexpr const char * kRobotObjectId = "robot.object.id";
+
+// --- Component (ROS mapping: node) -----------------------------------------
+
+/// Logical component/node name. [str]
+inline constexpr const char * kRobotComponentName = "robot.component.name";
+
+// ===========================================================================
+// ros.* — ROS mapping keys (implementation-specific; present only when ROS)
+// ===========================================================================
+
+/// ROS node name. [str]
+inline constexpr const char * kRosNode = "ros.node";
+/// Topic name. [str]
+inline constexpr const char * kRosTopic = "ros.topic";
+/// Service name. [str]
+inline constexpr const char * kRosService = "ros.service";
+/// ROS message/interface type, e.g. "nav2_msgs/action/NavigateToPose". [str]
+inline constexpr const char * kRosMessageType = "ros.message.type";
+/// DDS publisher GID (hex) — content-correlation key (ROB-427). [str]
+inline constexpr const char * kRosPublisherGid = "ros.publisher_gid";
+/// DDS source timestamp (ns) — content-correlation key. [int64]
+inline constexpr const char * kRosSourceTimestamp = "ros.source_timestamp";
+/// Content hash — best-effort content-correlation key. [str]
+inline constexpr const char * kRosMessageContentHash =
+  "ros.message.content_hash";
+
+// ===========================================================================
+// Enumerated string values (lowercase, stable). Use these instead of literals
+// so producers cannot drift from the dictionary.
+// ===========================================================================
+
+/// Values for kRobotActionStatus: the goal lifecycle.
+namespace action_status
+{
+inline constexpr const char * kAccepted = "accepted";
+inline constexpr const char * kExecuting = "executing";
+inline constexpr const char * kSucceeded = "succeeded";
+inline constexpr const char * kAborted = "aborted";
+inline constexpr const char * kCanceled = "canceled";
+}  // namespace action_status
+
+/// Values for kRobotActionResult: the terminal domain outcome.
+namespace action_result
+{
+inline constexpr const char * kSucceeded = "succeeded";
+inline constexpr const char * kAborted = "aborted";
+inline constexpr const char * kCanceled = "canceled";
+}  // namespace action_result
+
+/// Values for kRobotCallbackType: the unit-of-work kind.
+namespace callback_type
+{
+inline constexpr const char * kSubscription = "subscription";
+inline constexpr const char * kTimer = "timer";
+inline constexpr const char * kService = "service";
+inline constexpr const char * kAction = "action";
+inline constexpr const char * kClient = "client";
+}  // namespace callback_type
+
+// ===========================================================================
 // Schema version of this convention set. Bumped when keys are added/changed so
-// consumers can assert compatibility. STUB value.
-inline constexpr const char * kSchemaVersion = "0.1.0";
+// consumers can assert compatibility. Tracks the package version.
+// ===========================================================================
+inline constexpr const char * kSchemaVersion = "0.2.0";
 
 }  // namespace robotops::trace::semconv
 

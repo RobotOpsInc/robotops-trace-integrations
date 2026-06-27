@@ -9,6 +9,27 @@ below are tagged with the affected package.
 0.2.0 (2026-06-26)
 ------------------
 
+* (robotops_trace_semconv) ROB-430: robotics semantic conventions v0 — the real
+  dictionary, promoting the package from a stub to the authoritative source of
+  truth. Header-only C++ (``robotops::trace::semconv``) + a byte-for-byte Python
+  mirror define every v0 key in two namespaces: ``robot.*`` portable concept keys
+  (action, callback, transform, joint, trajectory, target/pose, object,
+  component) and ``ros.*`` ROS-mapping keys (node, topic, service, message type,
+  publisher gid, source timestamp, content hash), plus the ``service.name`` /
+  ``robot.id`` resource attributes and the enumerated value constants
+  (``robot.action.status`` / ``robot.action.result`` / ``robot.callback.type``).
+  README carries the full dictionary table; a pytest smoke test asserts the key
+  strings. v0 is additive-only.
+
+* (robotops_trace_rclcpp) ROB-430: source span-attribute keys from
+  ``robotops_trace_semconv`` instead of local string literals. The rclcpp
+  integration now re-exports ``robot.action.goal_id``, ``robot.action.name``,
+  ``robot.action.result``, ``ros.topic``, ``ros.publisher_gid`` and
+  ``ros.source_timestamp`` from the dictionary — the emitted strings are
+  unchanged, so the ROB-422/427 goal-UUID correlation contract is preserved
+  (verified by the existing gtest suite). ``robot.action.goal_response`` /
+  ``robot.action.goal_accepted`` remain rclcpp-local (not in semconv v0).
+
 * (robotops_trace_rclcpp) ROB-422: first real rclcpp integration — opt-in,
   fork-free instrumentation for C++ ROS 2 nodes, built on the
   ``robotops_trace_cpp`` SDK core.

@@ -8,8 +8,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "robotops-trace-semconv"
-version = "0.1.0"
-description = "RobotOps Trace semantic conventions — robotics-general attribute keys (Python mirror). STUB (ROB-430)."
+version = "0.2.0"
+description = "RobotOps Trace robotics semantic conventions v0 — robot.* concept + ros.* mapping attribute keys (Python mirror, ROB-430)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
