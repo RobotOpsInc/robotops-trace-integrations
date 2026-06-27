@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""RobotOps Trace semantic conventions (ROB-430) — Python mirror [STUB].
+"""
+RobotOps Trace semantic conventions (ROB-430) — Python mirror [STUB].
 
 Mirror of ``include/robotops_trace_semconv/semconv.hpp``. Keeping the C++ header
 and this module in lockstep is the contract that stops attribute names from
@@ -28,20 +29,20 @@ and the ROS mapping land in ROB-430.
 # TODO(ROB-430): keep this list byte-for-byte aligned with semconv.hpp.
 # TODO(ROB-430): add ROS-specific mapping + value types/units.
 
-ROBOT_ACTION_RESULT = "robot.action.result"
-ROBOT_TRANSFORM_PARENT = "robot.transform.parent"
-ROBOT_TRANSFORM_CHILD = "robot.transform.child"
-ROBOT_JOINT_NAME = "robot.joint.name"
-ROBOT_TRAJECTORY_POINT_COUNT = "robot.trajectory.point_count"
+ROBOT_ACTION_RESULT = 'robot.action.result'
+ROBOT_TRANSFORM_PARENT = 'robot.transform.parent'
+ROBOT_TRANSFORM_CHILD = 'robot.transform.child'
+ROBOT_JOINT_NAME = 'robot.joint.name'
+ROBOT_TRAJECTORY_POINT_COUNT = 'robot.trajectory.point_count'
 
 # Schema version of this convention set (mirrors kSchemaVersion). STUB value.
-SCHEMA_VERSION = "0.1.0"
+SCHEMA_VERSION = '0.1.0'
 
 __all__ = [
-    "ROBOT_ACTION_RESULT",
-    "ROBOT_TRANSFORM_PARENT",
-    "ROBOT_TRANSFORM_CHILD",
-    "ROBOT_JOINT_NAME",
-    "ROBOT_TRAJECTORY_POINT_COUNT",
-    "SCHEMA_VERSION",
+    'ROBOT_ACTION_RESULT',
+    'ROBOT_TRANSFORM_PARENT',
+    'ROBOT_TRANSFORM_CHILD',
+    'ROBOT_JOINT_NAME',
+    'ROBOT_TRAJECTORY_POINT_COUNT',
+    'SCHEMA_VERSION',
 ]

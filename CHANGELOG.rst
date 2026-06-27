@@ -6,6 +6,43 @@ This monorepo contains independently-versioned packages. Each package owns its
 ``package.xml`` version; ``version-check.yml`` runs per changed package. Entries
 below are tagged with the affected package.
 
+0.2.0 (2026-06-26)
+------------------
+
+* (robotops_trace_rclcpp) ROB-422: first real rclcpp integration — opt-in,
+  fork-free instrumentation for C++ ROS 2 nodes, built on the
+  ``robotops_trace_cpp`` SDK core.
+
+  * **rclcpp_action goal-UUID correlation (the deterministic win).**
+    ``create_traced_action_server`` and ``trace_send_goal_options`` /
+    ``send_traced_goal`` wrap the PUBLIC ``rclcpp_action`` server callbacks and
+    client ``SendGoalOptions``. Every goal produces server- and client-side
+    spans carrying ``robot.action.goal_id`` — the canonical 8-4-4-4-12 lowercase
+    UUID (``goal_id_to_string``), emitted identically on both sides so the
+    correlation agent (ROB-427) can join the two traces across the process
+    boundary. ``scoped_action_span`` opens a Server span over the full goal
+    execution from inside the user's ``execute()`` body.
+  * **Per-callback spans (executor instrumentation).** ``traced_callback`` and
+    ``traced_subscription`` wrap subscription/timer/service callbacks at creation
+    time (the clean public hook in jazzy — no rclcpp fork). Each invocation opens
+    a span nested under the active thread-local context. OPT-IN per callback;
+    process-wide auto-instrumentation is deferred to the ROB-421 auto-init layer.
+  * **Best-effort content-correlation keys.** ``record_message_info`` /
+    ``traced_subscription`` stamp the publisher GID and source timestamp from
+    ``rclcpp::MessageInfo`` (``ros.publisher_gid``, ``ros.source_timestamp``,
+    ``ros.topic``) onto subscription spans.
+  * Local concept-level attribute keys (``robot.action.*``, ``ros.*``) pending
+    migration to ``robotops_trace_semconv`` (ROB-430); the ``robot.action.result``
+    key is already re-exported from semconv.
+  * Verified by a gtest suite in a combined ``ros:jazzy`` colcon workspace
+    (core-from-source): a real action client→server round trip proves both sides
+    emit the same goal UUID, and a wrapped subscription callback nests under the
+    active context and carries the content keys. Spans captured via the core's
+    ``InMemorySpanExporter``.
+  * NOTE: the SDK core was built from source. The integration CI (which resolves
+    ``ros-<distro>-robotops-trace-cpp`` from apt) stays red until the core
+    publishes to ``apt.development``; the local colcon build is the verification.
+
 0.1.0 (2026-06-26)
 -------------------
 

@@ -17,7 +17,8 @@
 
 #include "robotops_trace_moveit/robotops_trace_moveit.hpp"
 
-namespace robotops::trace {
+namespace robotops::trace
+{
 
 const char * robotops_trace_moveit_version() noexcept
 {

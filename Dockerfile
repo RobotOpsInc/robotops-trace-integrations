@@ -35,6 +35,7 @@ RUN apt-get update && apt-get install -y \
     dpkg-dev \
     debhelper \
     curl \
+    libcurl4-openssl-dev \
     ca-certificates \
     gnupg \
     && rm -rf /var/lib/apt/lists/*
@@ -73,9 +74,20 @@ COPY packages ./packages
 
 # Initialize rosdep and install workspace dependencies. Respects the
 # version_gte constraints declared in each package.xml.
+#
+# The C++ SDK core (ros-<distro>-robotops-trace-cpp) IS now published to
+# apt.development, so its resolution is MANDATORY (no `|| true` swallow) — a
+# real failure here should surface as a red build. Two keys are skipped:
+#   * robotops_trace_python -> python3-robotops-trace: the Python SDK core, NOT
+#     yet on PyPI/apt. It is an exec_depend (runtime) of the ament_python
+#     robotops_trace_rclpy package, so colcon still builds rclpy without it.
+#   * ament_python: a build_type, not an installable rosdep key (it has no
+#     rosdep rule); colcon handles the ament_python build type natively. The
+#     robotops_trace_rclpy manifest lists it as a buildtool_depend, which rosdep
+#     cannot resolve, so skip it.
 RUN rosdep update && \
-    rosdep install --from-paths packages --ignore-src -y --rosdistro ${ROS_DISTRO} || \
-    echo "WARNING: rosdep install failed — expected until the robotops-trace-cpp/python cores are published (see README Status)."
+    rosdep install --from-paths packages --ignore-src -y --rosdistro ${ROS_DISTRO} \
+      --skip-keys "robotops_trace_python ament_python"
 
 WORKDIR /workspace
 

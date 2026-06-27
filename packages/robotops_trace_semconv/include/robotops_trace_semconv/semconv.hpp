@@ -28,7 +28,8 @@
 #ifndef ROBOTOPS_TRACE_SEMCONV__SEMCONV_HPP_
 #define ROBOTOPS_TRACE_SEMCONV__SEMCONV_HPP_
 
-namespace robotops::trace::semconv {
+namespace robotops::trace::semconv
+{
 
 // --- Concept-level robotics-general keys (TODO ROB-430: finalize) ----------
 //

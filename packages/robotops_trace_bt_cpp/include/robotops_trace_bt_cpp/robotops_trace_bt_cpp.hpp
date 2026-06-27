@@ -17,7 +17,8 @@
 #ifndef ROBOTOPS_TRACE_BT_CPP__ROBOTOPS_TRACE_BT_CPP_HPP_
 #define ROBOTOPS_TRACE_BT_CPP__ROBOTOPS_TRACE_BT_CPP_HPP_
 
-namespace robotops::trace {
+namespace robotops::trace
+{
 
 /// Returns the package version string. Placeholder until ROB-424.
 const char * robotops_trace_bt_cpp_version() noexcept;

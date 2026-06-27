@@ -2,10 +2,13 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>robotops_trace_rclcpp</name>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <description>
-    RobotOps Trace integration for rclcpp: executor callback spans and the rclcpp_action goal-UUID span key, built on the robotops_trace_cpp SDK core.
-    STUB / scaffold — real integration logic lands in ROB-422.
+    RobotOps Trace integration for rclcpp: opt-in, fork-free instrumentation for
+    C++ ROS 2 nodes. Provides rclcpp_action client/server wrappers that emit the
+    deterministic goal-UUID correlation key, per-callback span wrappers, and
+    best-effort message content-correlation keys. Built on the robotops_trace_cpp
+    SDK core.
   </description>
 
   <maintainer email="kristophm@robotops.com">Kristoph Matthews</maintainer>
@@ -26,6 +29,9 @@
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>example_interfaces</test_depend>
+  <test_depend>std_msgs</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
