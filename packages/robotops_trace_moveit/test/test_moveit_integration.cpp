@@ -227,7 +227,8 @@ TEST_F(MoveItTraceTest, EachQueuedTrajectoryRestoresItsOwnParent)
   EXPECT_EQ(tracer.pending_count(), 2u);
 
   // Execute both on a worker thread, in queue order, each its own scope.
-  std::thread([&]()
+  std::thread(
+    [&]()
     {
       {
         auto s0 = tracer.on_execute(k0, make_info(), "moveit.execute.A");
@@ -270,7 +271,8 @@ TEST_F(MoveItTraceTest, DiscardDropsCapturedContext)
 
   // A subsequent execute for the discarded key opens the execute span as a ROOT
   // (no captured parent), not under the stale move_action.
-  std::thread([&]()
+  std::thread(
+    [&]()
     {
       auto scope = tracer.on_execute(key, make_info());
     }).join();
@@ -296,7 +298,8 @@ TEST_F(MoveItTraceTest, NoActiveContextMeansRootExecuteSpan)
   tracer.on_enqueue(key);                    // no surrounding span
   EXPECT_EQ(tracer.pending_count(), 0u) << "nothing to capture";
 
-  std::thread([&]()
+  std::thread(
+    [&]()
     {
       auto scope = tracer.on_execute(key, make_info());
     }).join();
@@ -331,7 +334,8 @@ TEST_F(MoveItTraceTest, DisabledSdkIsANoOp)
     tracer.on_enqueue(key);
   }
   EXPECT_EQ(tracer.pending_count(), 0u) << "nothing captured when disabled";
-  std::thread([&]()
+  std::thread(
+    [&]()
     {
       auto scope = tracer.on_execute(key, make_info());
       EXPECT_FALSE(scope.active());
