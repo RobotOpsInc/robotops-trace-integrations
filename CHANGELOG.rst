@@ -6,6 +6,46 @@ This monorepo contains independently-versioned packages. Each package owns its
 ``package.xml`` version; ``version-check.yml`` runs per changed package. Entries
 below are tagged with the affected package.
 
+0.3.0 (2026-06-28)
+------------------
+
+* (robotops_trace_ros2_control) ROB-449: ship a **Humble** variant of the JTC
+  carry-patch alongside jazzy, and **fix the version pin**. Patches are now
+  per-distro under ``patches/<distro>/`` and ``apply.sh`` selects by
+  ``${ROS_DISTRO}``.
+
+  * **Pin fix (the tag-drift bug).** The original single patch *claimed* to target
+    ros2_controllers ``4.40.1`` but in fact only applied to the moving ``jazzy``
+    *branch*, which had drifted past the tag (e.g. ``preempt_active_goal`` on the
+    branch is ``setAborted`` + ``runNonRealtime``; on the ``4.40.1`` tag — and on
+    humble — it is ``setCanceled``). The jazzy variant is re-based onto the
+    immutable ``4.40.1`` tag (the version apt ships), so the claimed pin and the
+    patch now agree and the rebuild stays byte-aligned with the underlay.
+  * **Humble variant** targets ros2_controllers ``2.53.1`` (apt
+    ``ros-humble-joint-trajectory-controller``). Structural delta vs jazzy: humble's
+    JTC CMake links via ``ament_target_dependencies(... ${THIS_PACKAGE_INCLUDE_DEPENDS})``
+    (no modern ``target_link_libraries`` block), so the variant adds the helper to
+    ``THIS_PACKAGE_INCLUDE_DEPENDS``. The four C++ boundary hooks are byte-identical.
+  * **Verified (REAL, ros:humble + ros:jazzy Docker):** ``git apply --check`` exit 0
+    for both variants against their pinned tag (humble 2.53.1, jazzy 4.40.1), and the
+    patched ``joint_trajectory_controller.cpp`` TU compiles against the apt
+    ros2_control underlay + the helper on BOTH distros.
+
+* (robotops_trace_moveit) ROB-449: ship a **Humble** variant of the MoveIt TEM
+  carry-patch alongside jazzy. Patches are now per-distro under ``patches/<distro>/``
+  and ``apply.sh`` selects by ``${ROS_DISTRO}``.
+
+  * **Humble variant** targets moveit2 ``2.5.9`` (apt ``ros-humble-moveit-ros-planning``)
+    — a real re-base, not a byte-copy: humble's TEM public header is
+    ``trajectory_execution_manager.h`` (jazzy: ``.hpp``), and its
+    ``trajectory_execution_manager`` CMake links via ``ament_target_dependencies``.
+    The ``push`` / ``executePart`` / ``clear`` hook bodies are identical across distros
+    (the helper API is framework-version-agnostic).
+  * **Verified (REAL, ros:humble + ros:jazzy Docker):** ``git apply --check`` exit 0
+    for both variants against their pinned tag (humble 2.5.9, jazzy 2.12.4), and the
+    patched ``trajectory_execution_manager.cpp`` TU compiles against the apt MoveIt
+    underlay + the helper on BOTH distros.
+
 0.2.0 (2026-06-27)
 ------------------
 

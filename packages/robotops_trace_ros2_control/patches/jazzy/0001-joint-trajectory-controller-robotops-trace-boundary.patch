@@ -1,5 +1,5 @@
 diff --git a/joint_trajectory_controller/CMakeLists.txt b/joint_trajectory_controller/CMakeLists.txt
-index 53a20bf..e06f288 100644
+index f370fcf..29c42d5 100644
 --- a/joint_trajectory_controller/CMakeLists.txt
 +++ b/joint_trajectory_controller/CMakeLists.txt
 @@ -7,6 +7,7 @@ export_windows_symbols()
@@ -19,7 +19,7 @@ index 53a20bf..e06f288 100644
                        controller_interface::controller_interface
                        hardware_interface::hardware_interface
 diff --git a/joint_trajectory_controller/include/joint_trajectory_controller/joint_trajectory_controller.hpp b/joint_trajectory_controller/include/joint_trajectory_controller/joint_trajectory_controller.hpp
-index 58898bb..9b1fc5e 100644
+index 7749d84..aa63d14 100644
 --- a/joint_trajectory_controller/include/joint_trajectory_controller/joint_trajectory_controller.hpp
 +++ b/joint_trajectory_controller/include/joint_trajectory_controller/joint_trajectory_controller.hpp
 @@ -41,6 +41,7 @@
@@ -57,7 +57,7 @@ index e5edfe4..210693c 100644
    <depend>controller_interface</depend>
    <depend>control_msgs</depend>
 diff --git a/joint_trajectory_controller/src/joint_trajectory_controller.cpp b/joint_trajectory_controller/src/joint_trajectory_controller.cpp
-index 2edce38..4951b22 100644
+index c41dcdd..eaf7f19 100644
 --- a/joint_trajectory_controller/src/joint_trajectory_controller.cpp
 +++ b/joint_trajectory_controller/src/joint_trajectory_controller.cpp
 @@ -32,6 +32,7 @@
@@ -68,7 +68,7 @@ index 2edce38..4951b22 100644
  #include "rclcpp_lifecycle/state.hpp"
  
  #include "rclcpp/version.h"
-@@ -1439,6 +1440,10 @@ rclcpp_action::CancelResponse JointTrajectoryController::goal_cancelled_callback
+@@ -1526,6 +1527,10 @@ rclcpp_action::CancelResponse JointTrajectoryController::goal_cancelled_callback
      rt_has_pending_goal_ = false;
      auto action_res = std::make_shared<FollowJTrajAction::Result>();
      active_goal->setCanceled(action_res);
@@ -79,7 +79,7 @@ index 2edce38..4951b22 100644
      rt_active_goal_.writeFromNonRT(RealtimeGoalHandlePtr());
  
      if (should_decelerate_on_cancel_)
-@@ -1458,6 +1463,14 @@ rclcpp_action::CancelResponse JointTrajectoryController::goal_cancelled_callback
+@@ -1545,6 +1550,14 @@ rclcpp_action::CancelResponse JointTrajectoryController::goal_cancelled_callback
  void JointTrajectoryController::goal_accepted_callback(
    std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> goal_handle)
  {
@@ -94,7 +94,7 @@ index 2edce38..4951b22 100644
    // mark a pending goal
    rt_has_pending_goal_ = true;
  
-@@ -1488,7 +1501,24 @@ void JointTrajectoryController::goal_accepted_callback(
+@@ -1575,7 +1588,24 @@ void JointTrajectoryController::goal_accepted_callback(
    // Setup goal status checking timer
    goal_handle_timer_ = get_node()->create_wall_timer(
      action_monitor_period_.to_chrono<std::chrono::nanoseconds>(),
@@ -120,10 +120,10 @@ index 2edce38..4951b22 100644
  }
  
  void JointTrajectoryController::compute_error_for_joint(
-@@ -1832,6 +1862,10 @@ void JointTrajectoryController::preempt_active_goal()
-     active_goal->setAborted(action_res);
-     // Deliver result now; the old goal_handle_timer_ is destroyed after this returns.
-     active_goal->runNonRealtime();
+@@ -1917,6 +1947,10 @@ void JointTrajectoryController::preempt_active_goal()
+     action_res->set__error_code(FollowJTrajAction::Result::INVALID_GOAL);
+     action_res->set__error_string("Current goal cancelled due to new incoming action.");
+     active_goal->setCanceled(action_res);
 +    // RobotOps Trace (ROB-425): close the preempted goal's span as aborted (NON-RT).
 +    robotops_traj_tracer_.on_result(
 +      active_goal->gh_->get_goal_id(),
