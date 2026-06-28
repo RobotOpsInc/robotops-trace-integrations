@@ -1,0 +1,150 @@
+diff --git a/moveit_ros/planning/CMakeLists.txt b/moveit_ros/planning/CMakeLists.txt
+index 9b4136d..8ebe0a0 100644
+--- a/moveit_ros/planning/CMakeLists.txt
++++ b/moveit_ros/planning/CMakeLists.txt
+@@ -25,6 +25,8 @@ find_package(tf2_geometry_msgs REQUIRED)
+ find_package(tf2_msgs REQUIRED)
+ find_package(tf2_ros REQUIRED)
+ find_package(urdf REQUIRED)
++# RobotOps Trace (ROB-426): the MoveIt async-boundary capture/restore helper.
++find_package(robotops_trace_moveit REQUIRED)
+ # find_package(moveit_ros_perception REQUIRED)
+ 
+ # Finds Boost Components
+@@ -78,6 +80,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
+     tf2_msgs
+     tf2_ros
+     urdf
++    robotops_trace_moveit  # RobotOps Trace (ROB-426)
+     # moveit_ros_perception
+ )
+ 
+diff --git a/moveit_ros/planning/package.xml b/moveit_ros/planning/package.xml
+index 0519750..a63d341 100644
+--- a/moveit_ros/planning/package.xml
++++ b/moveit_ros/planning/package.xml
+@@ -44,6 +44,7 @@
+   <depend>tf2_ros</depend>
+   <depend>tf2</depend>
+   <depend>urdf</depend>
++  <depend>robotops_trace_moveit</depend><!-- RobotOps Trace (ROB-426) -->
+ 
+   <test_depend>ament_cmake_gmock</test_depend>
+   <test_depend>ament_cmake_gtest</test_depend>
+diff --git a/moveit_ros/planning/trajectory_execution_manager/CMakeLists.txt b/moveit_ros/planning/trajectory_execution_manager/CMakeLists.txt
+index 929e8c8..fc28e74 100644
+--- a/moveit_ros/planning/trajectory_execution_manager/CMakeLists.txt
++++ b/moveit_ros/planning/trajectory_execution_manager/CMakeLists.txt
+@@ -16,7 +16,8 @@ ament_target_dependencies(
+   std_msgs
+   sensor_msgs
+   moveit_msgs
+-  tf2_eigen)
++  tf2_eigen
++  robotops_trace_moveit)  # RobotOps Trace (ROB-426): capture/restore helper
+ target_link_libraries(moveit_trajectory_execution_manager
+                       moveit_planning_scene_monitor)
+ 
+diff --git a/moveit_ros/planning/trajectory_execution_manager/include/moveit/trajectory_execution_manager/trajectory_execution_manager.hpp b/moveit_ros/planning/trajectory_execution_manager/include/moveit/trajectory_execution_manager/trajectory_execution_manager.hpp
+index de45355..b91e320 100644
+--- a/moveit_ros/planning/trajectory_execution_manager/include/moveit/trajectory_execution_manager/trajectory_execution_manager.hpp
++++ b/moveit_ros/planning/trajectory_execution_manager/include/moveit/trajectory_execution_manager/trajectory_execution_manager.hpp
+@@ -45,6 +45,7 @@
+ #include <rclcpp/rclcpp.hpp>
+ #include <moveit/controller_manager/controller_manager.hpp>
+ #include <pluginlib/class_loader.hpp>
++#include <robotops_trace_moveit/robotops_trace_moveit.hpp>
+ 
+ #include <memory>
+ #include <deque>
+@@ -328,6 +329,14 @@ private:
+ 
+   std::vector<TrajectoryExecutionContext*> trajectories_;
+ 
++  // RobotOps Trace (ROB-426): captures the active trace context when a trajectory
++  // is enqueued (push, on the caller thread) and restores it when that trajectory
++  // is executed (executePart, on the execution thread), so the controller hop
++  // (FollowJointTrajectory) nests under move_action across the queue boundary.
++  // Keyed by the queued TrajectoryExecutionContext* identity. Never perturbs
++  // execution; a no-op when the SDK is disabled.
++  robotops::trace::moveit::TrajectoryExecutionTracer robotops_traj_tracer_;
++
+   std::unique_ptr<pluginlib::ClassLoader<moveit_controller_manager::MoveItControllerManager> > controller_manager_loader_;
+   moveit_controller_manager::MoveItControllerManagerPtr controller_manager_;
+ 
+diff --git a/moveit_ros/planning/trajectory_execution_manager/src/trajectory_execution_manager.cpp b/moveit_ros/planning/trajectory_execution_manager/src/trajectory_execution_manager.cpp
+index 1264695..ddb44ed 100644
+--- a/moveit_ros/planning/trajectory_execution_manager/src/trajectory_execution_manager.cpp
++++ b/moveit_ros/planning/trajectory_execution_manager/src/trajectory_execution_manager.cpp
+@@ -38,6 +38,8 @@
+ #include <moveit/robot_state/robot_state.hpp>
+ #include <moveit/robot_trajectory/robot_trajectory.hpp>
+ #include <geometric_shapes/check_isometry.h>
++#include <robotops_trace_moveit/robotops_trace_moveit.hpp>  // RobotOps Trace (ROB-426)
++#include <cstdint>
+ #include <memory>
+ #include <tf2_eigen/tf2_eigen.hpp>
+ #include <moveit/utils/logger.hpp>
+@@ -453,6 +455,12 @@ bool TrajectoryExecutionManager::push(const moveit_msgs::msg::RobotTrajectory& t
+       RCLCPP_INFO_STREAM(logger_, ss.str());
+     }
+     trajectories_.push_back(context);
++    // RobotOps Trace (ROB-426): capture-on-enqueue. Snapshot the trace context
++    // active on THIS (caller) thread -- the move_action span -- and key it by the
++    // queued TrajectoryExecutionContext* so executePart() can restore it on the
++    // execution thread. A value snapshot, so it survives even if move_action ends
++    // before execution. No-op when the SDK is disabled / no context is active.
++    robotops_traj_tracer_.on_enqueue(context);
+     return true;
+   }
+   else
+@@ -1303,7 +1311,12 @@ void TrajectoryExecutionManager::clear()
+   {
+     std::scoped_lock slock(execution_state_mutex_);
+     for (TrajectoryExecutionContext* trajectory : trajectories_)
++    {
++      // RobotOps Trace (ROB-426): drop any context captured for a trajectory that
++      // was pushed but never executed (cleared), so captures do not accumulate.
++      robotops_traj_tracer_.discard(trajectory);
+       delete trajectory;
++    }
+     trajectories_.clear();
+   }
+   else
+@@ -1372,6 +1385,36 @@ bool TrajectoryExecutionManager::executePart(std::size_t part_index)
+ {
+   TrajectoryExecutionContext& context = *trajectories_[part_index];
+ 
++  // RobotOps Trace (ROB-426): restore-on-execute. Re-establish the trace context
++  // captured for this trajectory at push() time and open the "moveit.execute" span
++  // here on the execution thread, so the FollowJointTrajectory action client opened
++  // below in sendTrajectory() nests under move_action across the queue->execution
++  // hop. The RAII scope spans the send + waitForExecution() below and closes at
++  // function return, after which the restored context is popped. The small
++  // attribute computation is cheap and runs on the (non-real-time) execution
++  // thread, never in the controller's RT loop. Zero-impact / no-op when disabled.
++  robotops::trace::moveit::TrajectoryInfo robotops_traj_info;
++  {
++    std::int64_t point_count = 0;
++    std::int64_t joint_count = 0;
++    std::string joint_names;
++    for (const moveit_msgs::msg::RobotTrajectory& part : context.trajectory_parts_)
++    {
++      point_count += static_cast<std::int64_t>(part.joint_trajectory.points.size());
++      for (const std::string& joint_name : part.joint_trajectory.joint_names)
++      {
++        if (!joint_names.empty())
++          joint_names.push_back(',');
++        joint_names += joint_name;
++        ++joint_count;
++      }
++    }
++    robotops_traj_info.point_count = point_count;
++    robotops_traj_info.joint_count = joint_count;
++    robotops_traj_info.joint_names = std::move(joint_names);
++  }
++  auto robotops_exec_scope = robotops_traj_tracer_.on_execute(&context, robotops_traj_info);
++
+   // first make sure desired controllers are active
+   if (ensureActiveControllers(context.controllers_))
+   {

@@ -9,6 +9,61 @@ below are tagged with the affected package.
 0.2.0 (2026-06-27)
 ------------------
 
+* (robotops_trace_moveit) ROB-426: first real MoveIt integration — closes the ★
+  one residual no-public-hook async case, promoting the package from a stub. Built
+  on the ``robotops_trace_cpp`` SDK core 0.3.0 (the ``capture_context`` /
+  ``ScopedContext`` async-context API) + ``robotops_trace_semconv``.
+
+  * **The ★ problem.** MoveIt's ``TrajectoryExecutionManager`` (TEM) QUEUES a
+    trajectory on one thread (``push`` / ``pushAndExecute``, from the MoveGroup
+    ``move_action`` callback) and EXECUTES it on a DIFFERENT thread
+    (``executeThread`` → ``executePart``). The SDK current-context is thread-local,
+    so it is lost across the queue and the controller hop
+    (``FollowJointTrajectory``) becomes a separate trace root instead of nesting
+    under ``move_action``. There is no public callback/seam at this boundary.
+  * **Mechanism: capture-on-enqueue / restore-on-execute.** The reusable
+    ``TrajectoryExecutionTracer`` helper snapshots the active context with
+    ``robotops::capture_context()`` when a trajectory is enqueued (keyed by the
+    queued ``TrajectoryExecutionContext*``) and, on the execution thread,
+    re-installs it with ``robotops::ScopedContext`` and opens a ``moveit.execute``
+    span (INTERNAL) on top of it. The execute span nests under ``move_action``; the
+    ``FollowJointTrajectory`` action client opened inside ``sendTrajectory()`` nests
+    under the (now-current) execute span. Net:
+    ``move_action → moveit.execute → FollowJointTrajectory`` end to end across the
+    thread/queue hop. ``executePart`` is one synchronous scope (send +
+    ``waitForExecution``), so an RAII span + ScopedContext is the right model here
+    (vs. the detached-span the ros2_control SERVER side uses for its split
+    accept/result stacks).
+  * **MoveIt-agnostic helper.** The helper deals only in trace contexts + a small
+    ``TrajectoryInfo`` POD (no MoveIt header), so it builds and is unit-tested
+    WITHOUT a MoveIt install. Span attributes (re-exported from semconv):
+    ``robot.trajectory.point_count``, ``robot.joint.count``, ``robot.joint.name``,
+    ``robot.component.name``. The MoveGroup goal UUID is not available at the TEM
+    layer, so ``robot.action.*`` stays on the rclcpp/rclpy action layer; nesting
+    provides the linkage.
+  * **No-fork delivery: carry-patch.** Stock TEM has no hook, so the package ships
+    BOTH the helper AND a carried patch (``patches/``, +63/−1 across five
+    ``moveit_ros/planning`` files) wiring it into stock TEM at the push / executePart
+    / clear boundaries. Carry-patch-now → upstream a proper TEM tracing hook later
+    (spec §3.4); this MoveIt TEM patch is the canonical carried-fork exception.
+  * **Zero robot impact.** Every helper method is ``noexcept`` + catch-all; ops
+    degrade to no-ops when the SDK is disabled; nothing runs in the controller's RT
+    loop (a different process), and nothing blocks the execution thread beyond the
+    value-copy capture + span open.
+  * Verified in ``ros:jazzy`` (core 0.3.0 from ``apt.development``, semconv from
+    source, MoveIt 2.12.4 from apt): a gtest drives the async boundary across two
+    REAL threads — capture under ``move_action`` on thread A, hand the context to
+    thread B, restore + open ``moveit.execute`` with a child
+    ``follow_joint_trajectory`` — and asserts via the core ``InMemorySpanExporter``
+    that the chain nests with one trace id + exact parent_span_id links (plus
+    per-trajectory keying, discard, no-context-root, disabled-SDK no-op). 5 passed,
+    ament lints green. The carried patch applies cleanly (``git apply --check`` exit
+    0) against stock moveit2 2.12.4 AND the patched
+    ``trajectory_execution_manager.cpp`` compiles + links against the apt MoveIt
+    underlay (the object references the helper's enqueue/execute/discard symbols).
+    The full live ``move_group`` → controller → hardware end-to-end run is deferred
+    to on-hardware ROB-435.
+
 * (robotops_trace_rclpy) ROB-423: first real rclpy integration — Python node
   parity with the rclcpp integration, promoting the package from a stub. It
   **monkey-patches stock rclpy at import** (``import robotops_trace_rclpy``), so
