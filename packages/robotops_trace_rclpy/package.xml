@@ -2,13 +2,15 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>robotops_trace_rclpy</name>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <description>
-    RobotOps Trace integration for rclpy: monkey-patches rclpy to propagate
-    trace context across executor callbacks and actions, built on the
-    robotops-trace (Python) SDK core. Ships BOTH as an ament_python deb (apt,
-    for ROS fleets) and to PyPI (for pip-only users).
-    STUB / scaffold — real integration logic lands in ROB-423.
+    RobotOps Trace integration for rclpy: monkey-patches rclpy at import so stock
+    Python ROS 2 nodes get traced with no code changes and no fork — per-callback
+    spans (subscription/timer/service/client) plus the canonical action goal-UUID
+    correlation key, emitted byte-identically to the rclcpp integration for
+    cross-language trace stitching. Built on the robotops-trace (Python) SDK core.
+    Ships BOTH as an ament_python deb (apt, for ROS fleets) and to PyPI (for
+    pip-only users).
   </description>
 
   <maintainer email="kristophm@robotops.com">Kristoph Matthews</maintainer>
@@ -30,6 +32,9 @@
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
+  <!-- Real rclpy objects + a real action round trip exercise the patches. -->
+  <test_depend>std_msgs</test_depend>
+  <test_depend>example_interfaces</test_depend>
 
   <export>
     <build_type>ament_python</build_type>
