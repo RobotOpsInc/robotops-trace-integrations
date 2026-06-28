@@ -62,7 +62,7 @@ jobs:
     steps:
       - id: set
         run: |
-          PACKAGES="robotops_trace_semconv robotops_trace_rclcpp robotops_trace_bt_cpp"
+          PACKAGES="robotops_trace_semconv robotops_trace_rclcpp robotops_trace_bt_cpp robotops_trace_ros2_control robotops_trace_moveit"
           echo "packages=${PACKAGES}" >> "$GITHUB_OUTPUT"
           echo "Releasable packages (topo order): ${PACKAGES}"
 
