@@ -34,7 +34,18 @@ import time
 from contextlib import contextmanager
 
 import pytest
-import robotops
+
+try:
+    import robotops
+
+    _HAS_ROBOTOPS = True
+except ImportError:
+    # The SDK core may be absent (e.g. CI before robotops-trace publishes to
+    # PyPI). The span-sink tests are skipped in that case; the pure cross-language
+    # goal-UUID format + idempotent-patch tests still run (they need only rclpy +
+    # semconv), so CI keeps real coverage of the load-bearing contract.
+    robotops = None  # type: ignore[assignment]
+    _HAS_ROBOTOPS = False
 
 import robotops_trace_rclpy
 from robotops_trace_rclpy import format_goal_id
@@ -54,6 +65,12 @@ _KNOWN_BYTES = bytes(
      0xA5, 0x67, 0x0E, 0x02, 0xB2, 0xC3, 0xD4, 0x79]
 )
 _KNOWN_CANONICAL = "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+
+# Tests that need the (mocked) SDK span sink. Skipped when the SDK core is not
+# installed; the format + idempotency tests below run regardless.
+_needs_sdk = pytest.mark.skipif(
+    not _HAS_ROBOTOPS, reason="robotops SDK core not installed (span-sink tests)"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +172,7 @@ def test_patch_is_idempotent():
 # ===========================================================================
 # Per-callback spans (executor instrumentation).
 # ===========================================================================
+@_needs_sdk
 def test_subscription_callback_opens_span(ros, spans):
     from std_msgs.msg import String
 
@@ -177,6 +195,7 @@ def test_subscription_callback_opens_span(ros, spans):
     assert span.kwargs.get("kind") == "consumer"
 
 
+@_needs_sdk
 def test_timer_callback_opens_span(ros, spans):
     ran = {"hit": False}
 
@@ -190,6 +209,7 @@ def test_timer_callback_opens_span(ros, spans):
     assert span.kwargs.get(ROBOT_CALLBACK_TYPE) == ROBOT_CALLBACK_TYPE_TIMER
 
 
+@_needs_sdk
 def test_service_callback_opens_span(ros, spans):
     from example_interfaces.srv import AddTwoInts
 
@@ -212,6 +232,7 @@ def test_service_callback_opens_span(ros, spans):
 # ===========================================================================
 # Zero robot impact: an instrumentation failure never breaks the callback.
 # ===========================================================================
+@_needs_sdk
 def test_instrumentation_error_does_not_break_callback(ros, monkeypatch):
     from std_msgs.msg import String
 
@@ -232,6 +253,7 @@ def test_instrumentation_error_does_not_break_callback(ros, monkeypatch):
 # Actions: a REAL client->server round trip emits the SAME canonical goal_id on
 # both sides (the deterministic, cross-language ROB-427 join key).
 # ===========================================================================
+@_needs_sdk
 def test_action_client_server_share_canonical_goal_id(ros, spans):
     import threading
 

@@ -38,7 +38,14 @@ from __future__ import annotations
 
 from typing import Any
 
-import robotops  # the RobotOps Python tracing SDK core
+try:
+    import robotops  # the RobotOps Python tracing SDK core
+except ImportError:
+    # The SDK core isn't installed (e.g. CI before robotops-trace publishes). The
+    # integration then degrades to a transparent pass-through — patching still
+    # happens and is idempotent, the wrappers just open no spans. This IS part of
+    # the zero-impact contract: no SDK -> no tracing, never an error.
+    robotops = None  # type: ignore[assignment]
 
 __all__ = [
     "SPAN_KIND_INTERNAL",
@@ -60,6 +67,8 @@ SPAN_KIND_CONSUMER = "consumer"
 
 def _open(name: str, kind: str | None, attributes: dict[str, Any]):
     """Open a span via the SDK, tolerating SDK builds without a ``kind=`` kwarg."""
+    if robotops is None:
+        return None  # SDK core absent -> transparent pass-through
     if kind is not None:
         try:
             return robotops.span(name, kind=kind, **attributes)
