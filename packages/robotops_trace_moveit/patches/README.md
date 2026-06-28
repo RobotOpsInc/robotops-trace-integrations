@@ -26,18 +26,43 @@ time (a proper tracing-hook in TEM — e.g. virtual `onTrajectoryEnqueued()` /
 `TrajectoryExecutionContext` — so downstreams never need to patch). CI applies it
 against stock MoveIt per distro to prove it still applies + compiles cleanly.
 
-## Files
+## Files (per-distro, ROB-449)
 
 ```
 patches/
-  0001-trajectory-execution-manager-context-capture.patch
-  apply.sh   # applies the patch against a stock moveit2 checkout
+  jazzy/0001-trajectory-execution-manager-context-capture.patch   # moveit2 tag 2.12.4
+  humble/0001-trajectory-execution-manager-context-capture.patch  # moveit2 tag 2.5.9
+  apply.sh   # selects patches/${ROS_DISTRO}/... and apply-checks against a stock checkout
 ```
+
+Each variant is pinned to the immutable upstream moveit2 tag the apt deb for that
+distro is built from (jazzy → `2.12.4`, humble → `2.5.9`).
+
+### Per-distro structural differences (ROB-449)
+
+Both variants wire the **same** `TrajectoryExecutionTracer` helper at the same
+three boundaries (`push` / `executePart` / `clear`). Humble's TEM, however,
+diverges structurally from jazzy's — this is a real re-base, not a byte-copy:
+
+- **Public header extension.** jazzy: `trajectory_execution_manager.hpp`; humble
+  (moveit2 2.5.9): `trajectory_execution_manager.h` (and the surrounding moveit
+  includes are `.h`, not `.hpp`). The helper include is `.hpp` in both.
+- **CMake.** humble's `trajectory_execution_manager/CMakeLists.txt` links via
+  `ament_target_dependencies(${MOVEIT_LIB_NAME} ...)` (so the variant appends
+  `robotops_trace_moveit` to that list); the planning-level CMake uses
+  `THIS_PACKAGE_INCLUDE_DEPENDS` + a `find_package(robotops_trace_moveit REQUIRED)`.
+- **Member anchor.** on humble, `trajectories_` is followed by
+  `continuous_execution_queue_`; the tracer member is inserted right after
+  `trajectories_` in both.
+
+The C++ hook bodies (`on_enqueue` / `on_execute` / `discard`) are identical across
+distros — the helper API is framework-version-agnostic.
 
 ## What the patch does (and does NOT do)
 
-Authored against **moveit2 2.12.4 (jazzy)**. It is **+63 / −1 lines** across five
-files, all of `moveit_ros/planning`:
+Originally authored against **moveit2 2.12.4 (jazzy)**; the **humble** variant is
+the same wiring re-based onto **moveit2 2.5.9**. It is **+63 / −1 lines** across
+five files, all of `moveit_ros/planning`:
 
 - **`trajectory_execution_manager.hpp`** — `#include` the helper and add one
   member: `robotops::trace::moveit::TrajectoryExecutionTracer
@@ -89,16 +114,17 @@ controller hop is no longer a separate root — it stitches under `move_action`.
 Customers have two options:
 
 1. **Use our build of `moveit_ros_planning`** (this patch applied) — the
-   carry-patch model. Run `apply.sh` against a stock `moveit2` checkout (pinned to
-   the matching release, currently **2.12.4 / jazzy**) before building.
+   carry-patch model. Run `apply.sh` against a stock `moveit2` checkout pinned to
+   the per-distro release (jazzy → **2.12.4**, humble → **2.5.9**) before building.
 2. **Custom integration** — don't patch anything; call the helper directly from
    your own code if you drive TEM yourself: `on_enqueue(key)` where you push,
    `on_execute(key, info)` at the top of your execution step. The patch is just
    the reference wiring of that same helper into stock TEM.
 
 ```bash
-# against a stock moveit2 checkout:
-./apply.sh /path/to/moveit2
+# against a stock moveit2 checkout (distro from $ROS_DISTRO, or arg 2):
+ROS_DISTRO=humble ./apply.sh /path/to/moveit2
+./apply.sh /path/to/moveit2 jazzy
 # or directly:
-git -C /path/to/moveit2 apply 0001-trajectory-execution-manager-context-capture.patch
+git -C /path/to/moveit2 apply humble/0001-trajectory-execution-manager-context-capture.patch
 ```

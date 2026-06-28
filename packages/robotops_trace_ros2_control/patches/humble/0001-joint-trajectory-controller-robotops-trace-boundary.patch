@@ -1,0 +1,125 @@
+diff --git a/joint_trajectory_controller/CMakeLists.txt b/joint_trajectory_controller/CMakeLists.txt
+index 1550553..f423fdd 100644
+--- a/joint_trajectory_controller/CMakeLists.txt
++++ b/joint_trajectory_controller/CMakeLists.txt
+@@ -7,6 +7,7 @@ endif()
+ 
+ set(THIS_PACKAGE_INCLUDE_DEPENDS
+     angles
++    robotops_trace_ros2_control
+     control_msgs
+     control_toolbox
+     controller_interface
+diff --git a/joint_trajectory_controller/include/joint_trajectory_controller/joint_trajectory_controller.hpp b/joint_trajectory_controller/include/joint_trajectory_controller/joint_trajectory_controller.hpp
+index 2f21605..808f521 100644
+--- a/joint_trajectory_controller/include/joint_trajectory_controller/joint_trajectory_controller.hpp
++++ b/joint_trajectory_controller/include/joint_trajectory_controller/joint_trajectory_controller.hpp
+@@ -42,6 +42,7 @@
+ #include "realtime_tools/realtime_buffer.hpp"
+ #include "realtime_tools/realtime_publisher.hpp"
+ #include "realtime_tools/realtime_server_goal_handle.hpp"
++#include "robotops_trace_ros2_control/robotops_trace_ros2_control.hpp"
+ #include "trajectory_msgs/msg/joint_trajectory.hpp"
+ #include "trajectory_msgs/msg/joint_trajectory_point.hpp"
+ 
+@@ -187,6 +188,13 @@ protected:
+ 
+   RealtimeGoalHandleBuffer rt_active_goal_;  ///< Currently active action goal, if any.
+   rclcpp_action::Server<FollowJTrajAction>::SharedPtr action_server_;
++
++  // RobotOps Trace (ROB-425): RT-safe FollowJointTrajectory boundary tracer.
++  // One detached SERVER span per goal (accept -> result), carrying the canonical
++  // goal UUID (cross-process join key, ROB-427) + joint/trajectory semconv. Driven
++  // ONLY from the action callbacks (accept / cancel / preempt) and the NON-RT action
++  // monitor timer -- NEVER from the real-time update() loop.
++  robotops::trace::ros2_control::FollowJointTrajectoryTracer robotops_traj_tracer_;
+   std::atomic<bool> rt_has_pending_goal_{false};  ///< Is there a pending action goal?
+   rclcpp::TimerBase::SharedPtr goal_handle_timer_;
+   rclcpp::Duration action_monitor_period_ = rclcpp::Duration(50ms);
+diff --git a/joint_trajectory_controller/package.xml b/joint_trajectory_controller/package.xml
+index 552d184..f3607d4 100644
+--- a/joint_trajectory_controller/package.xml
++++ b/joint_trajectory_controller/package.xml
+@@ -18,6 +18,7 @@
+   <buildtool_depend>ament_cmake</buildtool_depend>
+ 
+   <depend>angles</depend>
++  <depend>robotops_trace_ros2_control</depend>
+   <depend>backward_ros</depend>
+   <depend>controller_interface</depend>
+   <depend>control_msgs</depend>
+diff --git a/joint_trajectory_controller/src/joint_trajectory_controller.cpp b/joint_trajectory_controller/src/joint_trajectory_controller.cpp
+index 8602883..7e7a7a3 100644
+--- a/joint_trajectory_controller/src/joint_trajectory_controller.cpp
++++ b/joint_trajectory_controller/src/joint_trajectory_controller.cpp
+@@ -35,6 +35,7 @@
+ #include "rclcpp/time.hpp"
+ #include "rclcpp_action/create_server.hpp"
+ #include "rclcpp_action/server_goal_handle.hpp"
++#include "robotops_trace_ros2_control/robotops_trace_ros2_control.hpp"
+ #include "rclcpp_lifecycle/state.hpp"
+ 
+ namespace joint_trajectory_controller
+@@ -1286,6 +1287,10 @@ rclcpp_action::CancelResponse JointTrajectoryController::goal_cancelled_callback
+     rt_has_pending_goal_ = false;
+     auto action_res = std::make_shared<FollowJTrajAction::Result>();
+     active_goal->setCanceled(action_res);
++    // RobotOps Trace (ROB-425): close the boundary span as canceled (NON-RT).
++    robotops_traj_tracer_.on_result(
++      goal_handle->get_goal_id(),
++      robotops::trace::semconv::action_result::kCanceled);
+     rt_active_goal_.writeFromNonRT(RealtimeGoalHandlePtr());
+ 
+     // Enter hold current position mode
+@@ -1297,6 +1302,14 @@ rclcpp_action::CancelResponse JointTrajectoryController::goal_cancelled_callback
+ void JointTrajectoryController::goal_accepted_callback(
+   std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> goal_handle)
+ {
++  // RobotOps Trace (ROB-425): open the server boundary span for this goal on the
++  // executor thread (NON-RT), before the trajectory is handed to the RT loop. The
++  // span carries the canonical goal UUID so the agent stitches this controller hop
++  // under the action client (ROB-427), plus the joint/trajectory semconv.
++  robotops_traj_tracer_.on_goal_accepted(
++    goal_handle->get_goal_id(), *goal_handle->get_goal(),
++    std::string(get_node()->get_name()) + "/follow_joint_trajectory");
++
+   // mark a pending goal
+   rt_has_pending_goal_ = true;
+ 
+@@ -1327,7 +1340,24 @@ void JointTrajectoryController::goal_accepted_callback(
+   // Setup goal status checking timer
+   goal_handle_timer_ = get_node()->create_wall_timer(
+     action_monitor_period_.to_chrono<std::chrono::nanoseconds>(),
+-    std::bind(&RealtimeGoalHandle::runNonRealtime, rt_goal));
++    [this, rt_goal]()
++    {
++      rt_goal->runNonRealtime();
++      // RobotOps Trace (ROB-425): close the boundary span once the goal reaches a
++      // terminal state, observed here on the NON-RT monitor thread (the terminal is
++      // DECIDED in update() the RT-safe way -- a RealtimeServerGoalHandle flag write
++      // -- with zero span ops in the control loop). Idempotent + keyed by goal UUID:
++      // a cancel/preempt already closed it authoritatively, so this fires only for
++      // the natural-completion path. (Mapping a tolerance-violation abort decided in
++      // update() to 'aborted' rather than 'succeeded' needs the RT outcome threaded
++      // out to this thread -- a documented refinement for on-hardware ROB-435.)
++      if (rt_goal->gh_ && !rt_goal->gh_->is_active())
++      {
++        robotops_traj_tracer_.on_result(
++          rt_goal->gh_->get_goal_id(),
++          robotops::trace::semconv::action_result::kSucceeded);
++      }
++    });
+ }
+ 
+ void JointTrajectoryController::fill_partial_goal(
+@@ -1609,6 +1639,10 @@ void JointTrajectoryController::preempt_active_goal()
+     action_res->set__error_code(FollowJTrajAction::Result::INVALID_GOAL);
+     action_res->set__error_string("Current goal cancelled due to new incoming action.");
+     active_goal->setCanceled(action_res);
++    // RobotOps Trace (ROB-425): close the preempted goal's span as aborted (NON-RT).
++    robotops_traj_tracer_.on_result(
++      active_goal->gh_->get_goal_id(),
++      robotops::trace::semconv::action_result::kAborted);
+     rt_active_goal_.writeFromNonRT(RealtimeGoalHandlePtr());
+   }
+ }
