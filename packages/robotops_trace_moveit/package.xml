@@ -2,10 +2,16 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>robotops_trace_moveit</name>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <description>
-    RobotOps Trace integration for MoveIt: TrajectoryExecutionManager capture/restore across the internal async boundary. Carries a not-yet-upstream patch (the star async patch package), built on the robotops_trace_cpp SDK core.
-    STUB / scaffold — real integration logic lands in ROB-426.
+    RobotOps Trace integration for MoveIt: captures the active trace context when a
+    trajectory is enqueued on MoveIt's TrajectoryExecutionManager and restores it
+    on the execution thread, so the controller hop (FollowJointTrajectory) nests
+    under move_action across MoveIt's internal queue boundary — the one residual
+    async case with no public hook. Ships a reusable, MoveIt-agnostic
+    capture/restore helper (TrajectoryExecutionTracer) plus a carried patch wiring
+    it into stock moveit_ros_planning (the ★ async patch, carried until upstreamed).
+    Built on the robotops_trace_cpp SDK core.
   </description>
 
   <maintainer email="kristophm@robotops.com">Kristoph Matthews</maintainer>
@@ -13,19 +19,24 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <!-- RobotOps SDK core + shared semantic conventions. Pinned >=0.1.0 to the
-       core's current minor; a core major bump fans out a coordinated bump here
-       (see spec 2.5). NOTE: ros-<distro>-robotops-trace-cpp is NOT yet
-       published to apt, so rosdep resolution WILL fail until the core ships. -->
-  <depend version_gte="0.1.0">robotops_trace_cpp</depend>
+  <!-- RobotOps SDK core + shared semantic conventions. The core's async-context
+       API (capture_context/ScopedContext, ROB-443) ships in 0.3.0, so this
+       package requires >=0.3.0. A core major bump fans out a coordinated bump
+       here (see spec 2.5). -->
+  <depend version_gte="0.3.0">robotops_trace_cpp</depend>
   <depend version_gte="0.1.0">robotops_trace_semconv</depend>
 
-  <!-- Target framework (patched against stock MoveIt) -->
+  <!-- Target framework. The carried patch wires the helper into
+       moveit_ros_planning's TrajectoryExecutionManager; moveit_core supplies the
+       trajectory/robot-model types the patched TEM uses. These are the framework
+       the patch targets (built from stock MoveIt, a build/test-only proof) — the
+       MoveIt-agnostic helper library itself does not link them. -->
   <depend>moveit_ros_planning</depend>
   <depend>moveit_core</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
