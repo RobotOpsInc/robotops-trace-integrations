@@ -48,8 +48,10 @@ jobs:
   #
   # To add a package once its implementation merges, append it here AFTER its
   # in-repo dependencies:
-  #   * robotops_trace_bt_cpp  — add when feature/rob-424-bt   merges (ROB-424)
-  #   * robotops_trace_rclpy   — add when feature/rob-423-rclpy merges (ROB-423)
+  #   * robotops_trace_bt_cpp  — ADDED (ROB-424 merged; C++, depends on semconv).
+  #   * robotops_trace_rclpy   — HOLD: it's ament_python and its deb depends on the
+  #     Python core (python3-robotops-trace), which isn't published to apt/PyPI yet.
+  #     Add once the Python core publishes (PyPI org/Trusted-Publisher setup).
   # KEEP OUT until implemented (still stubs): robotops_trace_ros2_control,
   # robotops_trace_moveit.
   prepare:
@@ -60,7 +62,7 @@ jobs:
     steps:
       - id: set
         run: |
-          PACKAGES="robotops_trace_semconv robotops_trace_rclcpp"
+          PACKAGES="robotops_trace_semconv robotops_trace_rclcpp robotops_trace_bt_cpp"
           echo "packages=${PACKAGES}" >> "$GITHUB_OUTPUT"
           echo "Releasable packages (topo order): ${PACKAGES}"
 
