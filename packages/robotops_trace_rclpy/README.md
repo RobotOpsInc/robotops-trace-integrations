@@ -115,41 +115,41 @@ integration and the agent/ROSQL vocabulary.
 - **Idempotent patch.** Importing/installing twice does not double-wrap — each
   patched attribute and wrapped callback carries a sentinel. `uninstall()`
   restores stock rclpy (used by tests).
-- **Forward-compatible span kind.** Kind is passed via `kind=`; on an SDK build
-  that doesn't accept it, the wrapper transparently retries without it.
+- **Span kind.** Passed to the SDK as a real `robotops.SpanKind` (CLIENT on the
+  action client, SERVER on the action server, CONSUMER on subscriptions, …).
 
 ## Building & testing
 
-ROS 2 is not on the host — build/test in `ros:jazzy` Docker. The integration
-depends on the Python SDK core and the semconv mirror, **neither yet published**;
-install them from source into the test container:
+ROS 2 is not on the host — build/test in `ros:jazzy` Docker. The integration runs
+against the **real** `robotops` Python SDK core, which is not yet on PyPI; install
+it from the `robotops-trace-python` **`development`** branch (plus the semconv
+mirror) into the test container:
 
 ```sh
-pip install --no-deps --break-system-packages \
-    ../robotops-trace-python ../robotops_trace_semconv
+pip install --break-system-packages /path/to/robotops-trace-python   # @ development
+pip install --no-deps --break-system-packages ../robotops_trace_semconv
 colcon build  --packages-select robotops_trace_rclpy
 colcon test   --packages-select robotops_trace_rclpy --event-handlers console_direct+
 ```
 
-The pytest suite ([`test/`](test/)) asserts: the canonical goal-UUID format
-matches the rclcpp literal; the patch is idempotent; wrapped subscription / timer
-/ service callbacks open the right spans and still run; an instrumentation error
-never breaks the callback; and a **real** `example_interfaces/Fibonacci` action
-client→server round trip emits the **same** canonical `robot.action.goal_id` on
-both sides (the deterministic ROB-427 join key).
-
-**Real vs mocked:** rclpy is **real** (real `Node`, real action round trip over
-the middleware). The span **sink** is mocked: the `robotops` Python SDK core is
-currently a no-op scaffold (its `span()` yields `None` and it ships **no**
-in-memory exporter), so the tests record what the integration asks the SDK to
-open by monkeypatching `robotops.span`. When the real SDK + exporter land
-(ROB-420) the assertions become end-to-end unchanged.
+The pytest suite ([`test/`](test/)) is **end-to-end against the real SDK**: it
+initialises `robotops.init(robotops.Config(exporter=InMemorySpanExporter()))` and
+asserts on the spans the integration actually produces — names, `kind`, and
+semconv attributes. It covers: the canonical goal-UUID format == the rclcpp
+literal; the idempotent patch; wrapped subscription / timer / service / client
+callbacks producing the right spans (and still running); an instrumentation error
+never breaking the callback; and a **real** `example_interfaces/Fibonacci` action
+client→server round trip emitting the **same** canonical `robot.action.goal_id`
+on both sides (the deterministic ROB-427 join key), captured by the in-memory
+exporter. With the real SDK installed: **10 passed**.
 
 > **CI status:** the C++ core resolves from `apt.development`, but the Python SDK
-> core (`robotops-trace`) is not on PyPI yet; it is only an `exec_depend` of this
-> ament_python package, so colcon builds it without the core (the Dockerfile
-> rosdep step `--skip-keys` it). The colcon build+test above is the real
-> verification for now.
+> core (`robotops-trace`) has **no apt/PyPI release yet** — it is only an
+> `exec_depend` of this ament_python package, so the CI image builds without it
+> (the Dockerfile rosdep step `--skip-keys` it). In CI the SDK-sink tests
+> therefore **skip**, while the pure cross-language goal-UUID + idempotency tests
+> still run; the full 10-test end-to-end run above (real SDK from `development`)
+> is the complete verification until the Python core publishes.
 
 ## Distributes to (two lanes)
 

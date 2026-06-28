@@ -40,11 +40,15 @@ below are tagged with the affected package.
     callbacks, so the ``ros.publisher_gid`` / ``ros.source_timestamp`` content
     keys the rclcpp integration emits are not available fork-free in rclpy today;
     ``ros.topic`` / ``ros.message.type`` are emitted and the gap is documented.
-  * Verified in ``ros:jazzy`` Docker (core + semconv installed from source): a
-    pytest suite over real rclpy objects + a real ``example_interfaces/Fibonacci``
-    action round trip proves both sides emit the same canonical goal UUID. The
-    span sink is mocked (the Python SDK core is still a no-op scaffold with no
-    in-memory exporter); assertions become end-to-end once ROB-420 lands.
+  * Verified end-to-end in ``ros:jazzy`` Docker against the REAL ``robotops``
+    Python SDK core (installed from the ``robotops-trace-python`` ``development``
+    branch) + semconv: the suite injects an OTel ``InMemorySpanExporter`` via
+    ``robotops.Config`` and asserts on the spans the integration actually produces
+    (names, kind, semconv attributes), including a real
+    ``example_interfaces/Fibonacci`` action round trip proving both sides emit the
+    same canonical goal UUID — 10 passed. The Python core has no apt/PyPI release
+    yet, so the CI image builds without it (skip-keyed): the SDK-sink tests skip in
+    CI while the pure goal-UUID + idempotency tests run.
 
 * (robotops_trace_semconv) ROB-430: robotics semantic conventions v0 — the real
   dictionary, promoting the package from a stub to the authoritative source of

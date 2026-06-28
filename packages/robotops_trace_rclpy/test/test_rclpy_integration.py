@@ -12,20 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the rclpy monkey-patch integration (ROB-423).
+"""End-to-end tests for the rclpy monkey-patch integration (ROB-423).
 
-What's REAL vs MOCKED here:
-  * REAL rclpy: a real ``rclpy.node.Node`` and real ``create_subscription`` /
-    ``create_timer`` / ``create_service`` patched seams; a REAL action
-    client->server round trip over the middleware (example_interfaces/Fibonacci)
-    in ``test_action_client_server_share_canonical_goal_id``.
-  * MOCKED: the span sink. The ``robotops`` Python SDK core is currently a no-op
-    scaffold (its ``span()`` yields ``None`` and it ships NO in-memory exporter),
-    so there is nothing to capture real spans with. We instead record what the
-    integration asks the SDK to open by monkeypatching ``robotops.span`` with a
-    recording fake — i.e. we assert the integration opens the right spans with
-    the right names / kinds / semconv attributes. When the real SDK + exporter
-    land (ROB-420), these become end-to-end assertions unchanged.
+Everything here is REAL: real ``rclpy`` objects (real ``Node``, real
+``create_subscription`` / ``create_timer`` / ``create_service`` /
+``create_client`` seams, and a real ``example_interfaces/Fibonacci`` action
+client->server round trip over the middleware), and the REAL ``robotops`` Python
+SDK core driving spans into an OTel ``InMemorySpanExporter`` injected via
+``robotops.Config(exporter=...)`` — the same way the SDK core's own tests capture
+spans. Assertions are made on the exported spans (name, kind, semconv attributes).
+
+The SDK core ships as ``robotops-trace`` but is not yet on PyPI; install it from
+source (the ``development`` branch) into the test environment. When the core is
+not importable at all (an environment without it), the span-sink tests skip and
+the pure cross-language goal-UUID + idempotency tests still run.
 """
 
 from __future__ import annotations
@@ -37,23 +37,28 @@ import pytest
 
 try:
     import robotops
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+    from opentelemetry.trace import SpanKind as OTelSpanKind
 
-    _HAS_ROBOTOPS = True
+    _HAS_SDK = True
 except ImportError:
-    # The SDK core may be absent (e.g. CI before robotops-trace publishes to
-    # PyPI). The span-sink tests are skipped in that case; the pure cross-language
-    # goal-UUID format + idempotent-patch tests still run (they need only rclpy +
-    # semconv), so CI keeps real coverage of the load-bearing contract.
     robotops = None  # type: ignore[assignment]
-    _HAS_ROBOTOPS = False
+    InMemorySpanExporter = None  # type: ignore[assignment,misc]
+    OTelSpanKind = None  # type: ignore[assignment,misc]
+    _HAS_SDK = False
 
 import robotops_trace_rclpy
 from robotops_trace_rclpy import format_goal_id
 from robotops_trace_semconv import (
     ROBOT_ACTION_GOAL_ID,
+    ROBOT_ACTION_NAME,
     ROBOT_CALLBACK_TYPE,
+    ROBOT_CALLBACK_TYPE_ACTION,
+    ROBOT_CALLBACK_TYPE_CLIENT,
+    ROBOT_CALLBACK_TYPE_SERVICE,
     ROBOT_CALLBACK_TYPE_SUBSCRIPTION,
     ROBOT_CALLBACK_TYPE_TIMER,
+    ROS_SERVICE,
     ROS_TOPIC,
 )
 
@@ -66,46 +71,16 @@ _KNOWN_BYTES = bytes(
 )
 _KNOWN_CANONICAL = "f47ac10b-58cc-4372-a567-0e02b2c3d479"
 
-# Tests that need the (mocked) SDK span sink. Skipped when the SDK core is not
+# Tests that drive the real SDK span sink. Skipped only when the SDK core is not
 # installed; the format + idempotency tests below run regardless.
 _needs_sdk = pytest.mark.skipif(
-    not _HAS_ROBOTOPS, reason="robotops SDK core not installed (span-sink tests)"
+    not _HAS_SDK, reason="robotops SDK core / opentelemetry not installed"
 )
 
 
 # ---------------------------------------------------------------------------
-# Recording fake for the SDK span sink (see module docstring).
+# fixtures
 # ---------------------------------------------------------------------------
-class _RecordedSpan:
-    def __init__(self, name, kwargs, sink):
-        self.name = name
-        self.kwargs = kwargs
-        self._sink = sink
-
-    def __enter__(self):
-        self._sink.append(self)
-        return None
-
-    def __exit__(self, *exc):
-        return False
-
-
-@pytest.fixture
-def spans(monkeypatch):
-    """Capture every span the integration opens via ``robotops.span``."""
-    recorded: list[_RecordedSpan] = []
-
-    def fake_span(name, **kwargs):
-        return _RecordedSpan(name, kwargs, recorded)
-
-    monkeypatch.setattr(robotops, "span", fake_span)
-    return recorded
-
-
-def _find(spans, needle):
-    return next((s for s in spans if needle in s.name), None)
-
-
 @pytest.fixture(autouse=True)
 def _ensure_installed():
     # Import auto-installs, but be explicit + idempotent.
@@ -113,9 +88,17 @@ def _ensure_installed():
     assert robotops_trace_rclpy.is_installed()
 
 
-# ---------------------------------------------------------------------------
-# rclpy session lifecycle (one init per process)
-# ---------------------------------------------------------------------------
+@pytest.fixture
+def exporter():
+    """A real SDK initialised to export into memory (synchronous SimpleSpanProcessor)."""
+    exp = InMemorySpanExporter()
+    robotops.shutdown()  # clear any prior init (robotops.init is idempotent)
+    robotops.init(robotops.Config(service_name="rclpy-test-node", exporter=exp))
+    yield exp
+    robotops.force_flush()
+    robotops.shutdown()
+
+
 @pytest.fixture(scope="module")
 def ros():
     import rclpy
@@ -132,6 +115,10 @@ def _node(ros, name):
         yield node
     finally:
         node.destroy_node()
+
+
+def _find(exp, needle):
+    return next((s for s in exp.get_finished_spans() if needle in s.name), None)
 
 
 # ===========================================================================
@@ -170,10 +157,10 @@ def test_patch_is_idempotent():
 
 
 # ===========================================================================
-# Per-callback spans (executor instrumentation).
+# Per-callback spans (executor instrumentation) — asserted on REAL exported spans.
 # ===========================================================================
 @_needs_sdk
-def test_subscription_callback_opens_span(ros, spans):
+def test_subscription_callback_opens_span(ros, exporter):
     from std_msgs.msg import String
 
     ran = {"hit": False}
@@ -187,30 +174,33 @@ def test_subscription_callback_opens_span(ros, spans):
         # what the executor calls when a message arrives.
         sub.callback(String())
 
+    robotops.force_flush()
     assert ran["hit"], "user callback must still run"
-    span = _find(spans, "/chatter subscription")
-    assert span is not None, f"no subscription span; got {[s.name for s in spans]}"
-    assert span.kwargs.get(ROBOT_CALLBACK_TYPE) == ROBOT_CALLBACK_TYPE_SUBSCRIPTION
-    assert span.kwargs.get(ROS_TOPIC) == "/chatter"
-    assert span.kwargs.get("kind") == "consumer"
+    span = _find(exporter, "/chatter subscription")
+    assert span is not None, f"no span; got {[s.name for s in exporter.get_finished_spans()]}"
+    assert span.kind == OTelSpanKind.CONSUMER
+    assert span.attributes.get(ROBOT_CALLBACK_TYPE) == ROBOT_CALLBACK_TYPE_SUBSCRIPTION
+    assert span.attributes.get(ROS_TOPIC) == "/chatter"
 
 
 @_needs_sdk
-def test_timer_callback_opens_span(ros, spans):
+def test_timer_callback_opens_span(ros, exporter):
     ran = {"hit": False}
 
     with _node(ros, "timer_test") as node:
         timer = node.create_timer(1.0, lambda: ran.__setitem__("hit", True))
         timer.callback()
 
+    robotops.force_flush()
     assert ran["hit"]
-    span = _find(spans, "timer")
+    span = _find(exporter, "timer")
     assert span is not None
-    assert span.kwargs.get(ROBOT_CALLBACK_TYPE) == ROBOT_CALLBACK_TYPE_TIMER
+    assert span.kind == OTelSpanKind.INTERNAL
+    assert span.attributes.get(ROBOT_CALLBACK_TYPE) == ROBOT_CALLBACK_TYPE_TIMER
 
 
 @_needs_sdk
-def test_service_callback_opens_span(ros, spans):
+def test_service_callback_opens_span(ros, exporter):
     from example_interfaces.srv import AddTwoInts
 
     def handle(req, resp):
@@ -223,10 +213,30 @@ def test_service_callback_opens_span(ros, spans):
         req.a, req.b = 2, 3
         out = srv.callback(req, AddTwoInts.Response())
 
+    robotops.force_flush()
     assert out.sum == 5, "user service callback must run and return its value"
-    span = _find(spans, "/add service")
+    span = _find(exporter, "/add service")
     assert span is not None
-    assert span.kwargs.get("kind") == "server"
+    assert span.kind == OTelSpanKind.SERVER
+    assert span.attributes.get(ROBOT_CALLBACK_TYPE) == ROBOT_CALLBACK_TYPE_SERVICE
+    assert span.attributes.get(ROS_SERVICE) == "/add"
+
+
+@_needs_sdk
+def test_service_client_call_opens_span(ros, exporter):
+    from example_interfaces.srv import AddTwoInts
+
+    with _node(ros, "cli_test") as node:
+        client = node.create_client(AddTwoInts, "/add")
+        # call_async sends the request (no server needed to observe the span — the
+        # CLIENT span opens synchronously around the send).
+        client.call_async(AddTwoInts.Request())
+
+    robotops.force_flush()
+    span = _find(exporter, "/add call")
+    assert span is not None, f"no client span; got {[s.name for s in exporter.get_finished_spans()]}"
+    assert span.kind == OTelSpanKind.CLIENT
+    assert span.attributes.get(ROBOT_CALLBACK_TYPE) == ROBOT_CALLBACK_TYPE_CLIENT
 
 
 # ===========================================================================
@@ -251,10 +261,11 @@ def test_instrumentation_error_does_not_break_callback(ros, monkeypatch):
 
 # ===========================================================================
 # Actions: a REAL client->server round trip emits the SAME canonical goal_id on
-# both sides (the deterministic, cross-language ROB-427 join key).
+# both sides (the deterministic, cross-language ROB-427 join key), captured by the
+# real SDK's in-memory exporter.
 # ===========================================================================
 @_needs_sdk
-def test_action_client_server_share_canonical_goal_id(ros, spans):
+def test_action_client_server_share_canonical_goal_id(ros, exporter):
     import threading
 
     from example_interfaces.action import Fibonacci
@@ -299,13 +310,15 @@ def test_action_client_server_share_canonical_goal_id(ros, spans):
             server.destroy()
             client.destroy()
 
-    client_span = _find(spans, "action.goal")
-    server_span = _find(spans, "action.execute")
-    assert client_span is not None, f"no client span; got {[s.name for s in spans]}"
-    assert server_span is not None, f"no server span; got {[s.name for s in spans]}"
+    robotops.force_flush()
+    client_span = _find(exporter, "action.goal")
+    server_span = _find(exporter, "action.execute")
+    names = [s.name for s in exporter.get_finished_spans()]
+    assert client_span is not None, f"no client span; got {names}"
+    assert server_span is not None, f"no server span; got {names}"
 
-    client_id = client_span.kwargs.get(ROBOT_ACTION_GOAL_ID)
-    server_id = server_span.kwargs.get(ROBOT_ACTION_GOAL_ID)
+    client_id = client_span.attributes.get(ROBOT_ACTION_GOAL_ID)
+    server_id = server_span.attributes.get(ROBOT_ACTION_GOAL_ID)
 
     # The deterministic cross-process / cross-language join key.
     assert client_id, "client span missing robot.action.goal_id"
@@ -316,6 +329,9 @@ def test_action_client_server_share_canonical_goal_id(ros, spans):
     # integration would emit -> the two languages stitch.
     assert format_goal_id(bytes.fromhex(client_id.replace("-", ""))) == client_id
 
-    # Direction signal (matches the rclcpp ROB-427 contract).
-    assert client_span.kwargs.get("kind") == "client"
-    assert server_span.kwargs.get("kind") == "server"
+    # Other semconv attributes + the direction signal (matches rclcpp ROB-427).
+    assert client_span.attributes.get(ROBOT_ACTION_NAME) == "/fibonacci"
+    assert server_span.attributes.get(ROBOT_ACTION_NAME) == "/fibonacci"
+    assert server_span.attributes.get(ROBOT_CALLBACK_TYPE) == ROBOT_CALLBACK_TYPE_ACTION
+    assert client_span.kind == OTelSpanKind.CLIENT
+    assert server_span.kind == OTelSpanKind.SERVER

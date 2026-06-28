@@ -51,6 +51,7 @@ from robotops_trace_semconv import (
     ROBOT_ACTION_GOAL_ID,
     ROBOT_ACTION_NAME,
     ROBOT_CALLBACK_TYPE,
+    ROBOT_CALLBACK_TYPE_ACTION,
     ROBOT_CALLBACK_TYPE_CLIENT,
     ROBOT_CALLBACK_TYPE_SERVICE,
     ROBOT_CALLBACK_TYPE_SUBSCRIPTION,
@@ -114,7 +115,7 @@ def _wrap_callback(
 
         @functools.wraps(callback)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            with safe_span(span_name, kind, **attributes):
+            async with safe_span(span_name, kind, attributes):
                 return await callback(*args, **kwargs)
 
         wrapper: Any = async_wrapper
@@ -122,7 +123,7 @@ def _wrap_callback(
 
         @functools.wraps(callback)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-            with safe_span(span_name, kind, **attributes):
+            with safe_span(span_name, kind, attributes):
                 return callback(*args, **kwargs)
 
         wrapper = sync_wrapper
@@ -266,7 +267,7 @@ def _patch_action_client() -> None:
         except Exception:
             goal_uuid = None  # fall back to rclpy's own generation; no goal_id key
         name = f"{getattr(self, '_action_name', 'action')} action.goal"
-        with safe_span(name, SPAN_KIND_CLIENT, **attrs):
+        with safe_span(name, SPAN_KIND_CLIENT, attrs):
             return orig_send_goal_async(
                 self, goal, feedback_callback=feedback_callback, goal_uuid=goal_uuid
             )
@@ -309,7 +310,7 @@ def _wrap_execute_callback(execute_callback: Any, action_name: str) -> Any:
 
     def _attrs(goal_handle: Any) -> dict[str, Any]:
         attrs: dict[str, Any] = {
-            ROBOT_CALLBACK_TYPE: "action",
+            ROBOT_CALLBACK_TYPE: ROBOT_CALLBACK_TYPE_ACTION,
             ROBOT_ACTION_NAME: action_name,
         }
         try:
@@ -324,7 +325,7 @@ def _wrap_execute_callback(execute_callback: Any, action_name: str) -> Any:
 
         @functools.wraps(execute_callback)
         async def async_wrapper(goal_handle: Any) -> Any:
-            with safe_span(name, SPAN_KIND_SERVER, **_attrs(goal_handle)):
+            async with safe_span(name, SPAN_KIND_SERVER, _attrs(goal_handle)):
                 return await execute_callback(goal_handle)
 
         wrapper: Any = async_wrapper
@@ -332,7 +333,7 @@ def _wrap_execute_callback(execute_callback: Any, action_name: str) -> Any:
 
         @functools.wraps(execute_callback)
         def sync_wrapper(goal_handle: Any) -> Any:
-            with safe_span(name, SPAN_KIND_SERVER, **_attrs(goal_handle)):
+            with safe_span(name, SPAN_KIND_SERVER, _attrs(goal_handle)):
                 return execute_callback(goal_handle)
 
         wrapper = sync_wrapper
