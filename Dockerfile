@@ -53,17 +53,28 @@ RUN . /etc/os-release && \
     > /etc/apt/sources.list.d/robotops.list && \
     apt-get update
 
-# Custom rosdep rules mapping the RobotOps SDK-core keys to their ros-<distro>-*
-# debs so `rosdep install` over packages/ knows them.
+# Custom rosdep rules mapping the RobotOps SDK-core keys AND the in-repo
+# integration package keys to their ros-<distro>-* debs so `rosdep install`
+# knows them.
 #
-# NOTE: ros-${ROS_DISTRO}-robotops-trace-cpp / robotops-trace-semconv and the
-# robotops-trace (PyPI) core are NOT yet published. rosdep will RESOLVE these
-# keys to package names but the apt download will fail until the cores ship —
-# this is the expected scaffold state (see README "Status"). The mapping is
-# correct so it just works once the cores are released.
+# Why map the IN-REPO keys (e.g. robotops_trace_semconv) too: the release
+# pipeline builds each package's deb individually with `rosdep install
+# --from-paths <pkg>`. When rclcpp is built on its own, its sibling dependency
+# robotops_trace_semconv is NOT in the --from-paths set, so without a rosdep
+# rule the key is unresolvable ("Could not resolve rosdep key
+# 'robotops_trace_semconv'", ROB-437). The release job builds deps-first and
+# installs the sibling deb locally before building dependents, so this rule
+# resolves to the already-installed ros-<distro>-robotops-trace-semconv deb.
+# When rosdep runs over the FULL packages/ dir (this image, colcon CI),
+# --ignore-src makes the in-repo source package take precedence over this rule,
+# so there is no regression there.
+#
+# NOTE: the robotops-trace (PyPI) Python core is NOT yet published; the C++ SDK
+# core (ros-${ROS_DISTRO}-robotops-trace-cpp) IS published to apt.development.
 RUN mkdir -p /etc/ros/rosdep/sources.list.d && \
     printf '%s\n' \
     'robotops_trace_cpp:' '  ubuntu:' "    - ros-${ROS_DISTRO}-robotops-trace-cpp" \
+    'robotops_trace_semconv:' '  ubuntu:' "    - ros-${ROS_DISTRO}-robotops-trace-semconv" \
     'robotops_trace_python:' '  ubuntu:' '    - python3-robotops-trace' \
     > /etc/ros/rosdep/robotops-trace.yaml && \
     echo 'yaml file:///etc/ros/rosdep/robotops-trace.yaml' > /etc/ros/rosdep/sources.list.d/50-robotops-trace.list

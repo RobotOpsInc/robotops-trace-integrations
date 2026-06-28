@@ -34,8 +34,9 @@ below are tagged with the affected package.
     code (instrumentation errors are swallowed; user-callback errors propagate
     untouched); transparent pass-through when the SDK is uninitialised; importing
     twice never double-wraps (sentinel-guarded); ``uninstall()`` restores stock
-    rclpy. Span kind passed via ``kind=`` with a no-``kind`` fallback for
-    forward-compat.
+    rclpy. Span kind is passed to the SDK as a real ``robotops.SpanKind``
+    (CLIENT on the action client, SERVER on the action server, CONSUMER on
+    subscriptions, …).
   * **Limitation:** rclpy does not surface ``rmw_message_info`` to subscription
     callbacks, so the ``ros.publisher_gid`` / ``ros.source_timestamp`` content
     keys the rclcpp integration emits are not available fork-free in rclpy today;
@@ -49,6 +50,44 @@ below are tagged with the affected package.
     same canonical goal UUID — 10 passed. The Python core has no apt/PyPI release
     yet, so the CI image builds without it (skip-keyed): the SDK-sink tests skip in
     CI while the pure goal-UUID + idempotency tests run.
+
+* (robotops_trace_bt_cpp) ROB-424: first real BehaviorTree.CPP integration —
+  opt-in, fork-free instrumentation that covers both Nav2 and MoveIt Pro (both
+  run upstream BT.CPP), built on the ``robotops_trace_cpp`` SDK core.
+
+  * **Mechanism: the public ``BT::StatusChangeLogger`` seam.** ``TreeTracer`` is
+    a small ``StatusChangeLogger`` subclass; the customer constructs one after
+    building their tree (``robotops::trace::bt::TreeTracer tracer(tree);``). Its
+    base ctor subscribes to every node's status-change signal — **no fork of
+    BehaviorTree.CPP, no changes to user nodes**.
+  * **One span per node EXECUTION, not per tick.** BT.CPP re-ticks at 10–100 Hz;
+    a span is opened when a node enters execution (``IDLE -> RUNNING``, or
+    ``IDLE -> terminal`` for a synchronous node) and closed on the terminal
+    status (``SUCCESS`` / ``FAILURE`` / halt-to-``IDLE`` / ``SKIPPED``), so a
+    long-running async node yields one span covering its whole execution, not a
+    per-tick flood.
+  * **Nesting by TREE STRUCTURE, not thread-local context.** At attach time the
+    tree is walked once to build a child-UID -> parent-UID map; each span opens
+    with an explicit parent (``robotops::SpanOptions.parent``) set to the parent
+    node's still-open span. Correct because a control node goes ``RUNNING``
+    before ticking its children. This is robust to async nodes ticked across many
+    call stacks/threads, where thread-local context would be wrong.
+  * **Attributes.** Span name = ``node.name()``; ``robot.component.name``
+    (semconv) = node name; ``bt.node_type`` = ``registrationName()`` and
+    ``bt.status`` = terminal status are BT-local (not in semconv v0; a
+    ``TODO(semconv-v1)`` flags ``robot.behavior.*`` as the promotion candidate —
+    semconv is not edited here). ``FAILURE`` maps to span ``StatusCode::Error``,
+    ``SUCCESS`` to ``Ok``.
+  * **Zero-robot-impact.** The status-change callback never throws/blocks (SDK
+    span ops are ``noexcept`` + a catch-all); a disabled/uninitialised SDK is a
+    cheap no-op that does not perturb the tick.
+  * Verified by a gtest suite in a combined ``ros:jazzy`` colcon workspace (core
+    from ``apt.development``, semconv from source, ``behaviortree_cpp`` from apt):
+    a ``Sequence`` of an async ``StatefulActionNode`` + a sync action, ticked to
+    completion, proves one span per executed node, both leaves nested under the
+    Sequence (incl. the async node across ticks), a ``FAILURE`` node yielding an
+    Error-status span, and a kill-switched SDK emitting no spans. Spans captured
+    via the core's ``InMemorySpanExporter``; ament lints green.
 
 * (robotops_trace_semconv) ROB-430: robotics semantic conventions v0 — the real
   dictionary, promoting the package from a stub to the authoritative source of
