@@ -129,9 +129,21 @@ jobs:
               set -eo pipefail
               cd /ws
               rosdep update
-              # Refresh the apt index so the skip-already-published check below
-              # sees versions published by earlier release runs (idempotency).
+              # Refresh the apt index so (a) the skip-already-published check
+              # below sees versions published by earlier release runs and (b) the
+              # SDK-core upgrade right after sees the latest core.
               apt-get update
+              # Force the RobotOps SDK core to the latest published version.
+              # WHY: rosdep install only installs MISSING deps — it will NOT
+              # upgrade an already-satisfied package to meet a version_gte
+              # constraint. The cached rti:build base image baked
+              # ros-${ROS_DISTRO}-robotops-trace-cpp at whatever version existed
+              # when it was built (e.g. 0.2.0), so ros2_control/moveit (which
+              # build-depend on robotops_trace_cpp >= 0.3.0) failed
+              # dpkg-checkbuilddeps against the stale installed 0.2.0 core. A
+              # plain `apt-get install` upgrades the already-installed core to the
+              # current candidate, so the version_gte build-deps resolve.
+              apt-get install -y ros-${ROS_DISTRO}-robotops-trace-cpp
               REPO=src/robotops-trace-integrations
               for pkg in $PACKAGES; do
                 pkgdir="$REPO/packages/$pkg"
