@@ -23,17 +23,12 @@ jobs:
     steps:
       - name: Ensure release is from development branch
         run: |
-          # TEMP-VERIFY (ROB-437): also allow this verification branch so the
-          # idempotent-release fix can be proven from the branch BEFORE merge.
-          # This block is reverted before the PR is handed off — development is
-          # the only permitted ref on the merged workflow.
-          if [[ "${{ github.ref }}" != "refs/heads/development" \
-             && "${{ github.ref }}" != "refs/heads/feature/rob-437-apt-core-upgrade" ]]; then
+          if [[ "${{ github.ref }}" != "refs/heads/development" ]]; then
             echo "::error::Development releases can only be created from development branch"
             echo "Current branch: ${{ github.ref }}"
             exit 1
           fi
-          echo "🧪 Development pre-release from ${{ github.ref }}"
+          echo "🧪 Development pre-release from development branch"
 
   # ──────────────────────────────────────────────────────────────────────────
   # Implemented-package allowlist (ROB-437)
