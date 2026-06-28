@@ -1,4 +1,4 @@
-// Copyright 2025 Robot Ops Inc.
+// Copyright 2026 Robot Ops Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,17 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// ROB-425 STUB — public header placeholder. Real API lands in ROB-425.
-
 #ifndef ROBOTOPS_TRACE_ROS2_CONTROL__ROBOTOPS_TRACE_ROS2_CONTROL_HPP_
 #define ROBOTOPS_TRACE_ROS2_CONTROL__ROBOTOPS_TRACE_ROS2_CONTROL_HPP_
 
-namespace robotops::trace
+/// \file robotops_trace_ros2_control.hpp
+/// \brief Umbrella include for the RobotOps Trace ros2_control integration
+/// (ROB-425).
+///
+/// RT-safe instrumentation of the controller / FollowJointTrajectory action-server
+/// boundary: one detached SERVER span per goal, from accept to terminal result,
+/// carrying the canonical goal UUID (the cross-process join key, ROB-427) plus the
+/// joint/trajectory semantic conventions. Nothing here ever runs in the real-time
+/// `update()` control loop. Built on the transport-agnostic `robotops_trace_cpp`
+/// SDK core; attribute keys come from the shared `robotops_trace_semconv`
+/// dictionary.
+
+#include "robotops_trace_ros2_control/follow_joint_trajectory_tracer.hpp"  // FollowJointTrajectoryTracer
+#include "robotops_trace_ros2_control/identifiers.hpp"                     // goal_id_to_string
+#include "robotops_trace_ros2_control/semantic_conventions.hpp"           // keys::*
+
+namespace robotops::trace::ros2_control
 {
 
-/// Returns the package version string. Placeholder until ROB-425.
-const char * robotops_trace_ros2_control_version() noexcept;
+/// Returns the package version string (matches package.xml).
+const char * version() noexcept;
 
-}  // namespace robotops::trace
+}  // namespace robotops::trace::ros2_control
 
 #endif  // ROBOTOPS_TRACE_ROS2_CONTROL__ROBOTOPS_TRACE_ROS2_CONTROL_HPP_
