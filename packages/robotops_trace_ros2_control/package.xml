@@ -2,10 +2,16 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>robotops_trace_ros2_control</name>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <description>
-    RobotOps Trace integration for ros2_control: controller / FollowJointTrajectory boundary spans (RT-safe), built on the robotops_trace_cpp SDK core.
-    STUB / scaffold — real integration logic lands in ROB-425.
+    RobotOps Trace integration for ros2_control: RT-safe instrumentation of the
+    controller / FollowJointTrajectory action-server boundary. Opens one detached
+    SERVER span per goal (accept -> result) carrying the canonical goal UUID — the
+    cross-process join key (ROB-427) that stitches the controller hop under the
+    action client — plus the joint/trajectory semantic conventions. Nothing runs
+    in the real-time update() control loop. Ships a reusable RT-safe traced-boundary
+    helper plus a carried patch wiring it into stock joint_trajectory_controller.
+    Built on the robotops_trace_cpp SDK core.
   </description>
 
   <maintainer email="kristophm@robotops.com">Kristoph Matthews</maintainer>
@@ -13,19 +19,24 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <!-- RobotOps SDK core + shared semantic conventions. Pinned >=0.1.0 to the
-       core's current minor; a core major bump fans out a coordinated bump here
-       (see spec 2.5). NOTE: ros-<distro>-robotops-trace-cpp is NOT yet
-       published to apt, so rosdep resolution WILL fail until the core ships. -->
-  <depend version_gte="0.1.0">robotops_trace_cpp</depend>
+  <!-- RobotOps SDK core + shared semantic conventions. The core's detached-span
+       API (ROB-443) lands in 0.3.0, so this package requires >=0.3.0. A core
+       major bump fans out a coordinated bump here (see spec 2.5). -->
+  <depend version_gte="0.3.0">robotops_trace_cpp</depend>
   <depend version_gte="0.1.0">robotops_trace_semconv</depend>
 
-  <!-- Target framework -->
+  <!-- Target framework + the FollowJointTrajectory action message. The helper
+       takes a control_msgs goal + an rclcpp_action goal UUID; the carried patch
+       wires it into joint_trajectory_controller (built from stock ros2_controllers,
+       a build/test-only proof — not a runtime dependency of this helper). -->
   <depend>controller_interface</depend>
   <depend>hardware_interface</depend>
+  <depend>control_msgs</depend>
+  <depend>rclcpp_action</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

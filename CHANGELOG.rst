@@ -51,6 +51,49 @@ below are tagged with the affected package.
     yet, so the CI image builds without it (skip-keyed): the SDK-sink tests skip in
     CI while the pure goal-UUID + idempotency tests run.
 
+* (robotops_trace_ros2_control) ROB-425: first real ros2_control integration —
+  RT-safe instrumentation of the controller / ``FollowJointTrajectory``
+  action-server boundary, promoting the package from a stub. Built on the
+  ``robotops_trace_cpp`` SDK core (>=0.3.0, for the new detached-span API) and the
+  shared ``robotops_trace_semconv`` keys.
+
+  * **One detached SERVER span per goal (accept → result).** A new helper,
+    ``robotops::trace::ros2_control::FollowJointTrajectoryTracer``, opens a span
+    on goal-accept and closes it on the terminal result, carrying
+    ``robot.action.goal_id`` (the canonical RFC-4122 8-4-4-4-12 lowercase UUID,
+    rendered **byte-identically** to the rclcpp/rclpy action client's
+    ``goal_id_to_string``, so the ROB-427 agent join stitches the controller hop
+    under the action client), ``robot.action.name`` / ``robot.action.result``,
+    and the joint/trajectory semconv (``robot.joint.name`` comma-joined +
+    ``robot.joint.count`` + ``robot.trajectory.point_count``) read from the goal.
+  * **Detached span (ROB-443) — the right primitive for the async hold.**
+    ``robotops::start_detached_span()`` mints the span **without** touching any
+    thread's current-context, so it survives from accept to result across the
+    controller's async execution (RT loop + non-RT monitor) and is ended on
+    whatever thread observes the terminal, with an explicit parent.
+  * **RT-safety (hard guarantee).** Nothing runs in the real-time ``update()``
+    control loop — no span op, no allocation, no lock, no log. All hooks run on
+    the executor / non-RT monitor thread; the terminal outcome is decided in
+    ``update()`` the stock ros2_control way (an RT-safe ``RealtimeServerGoalHandle``
+    flag write) and the span is closed later, non-RT.
+  * **No-fork delivery: carry-patch.** Stock ``joint_trajectory_controller``
+    creates its action server internally, so the package ships both the reusable
+    helper **and** a carried patch (``patches/``) wiring it into stock JTC at the
+    accept/result boundary — the same carry-patch-now → upstream-later model as
+    the MoveIt async patch (spec §3.4). Customers use our patched JTC or call the
+    helper directly from a custom controller.
+  * **Zero-robot-impact.** Every helper method is ``noexcept`` + catch-all
+    wrapped; detached-span ops are noexcept and no-op when the SDK is disabled.
+  * **Tested:** a focused gtest drives a real ``control_msgs`` FollowJointTrajectory
+    goal through the helper's accept→result path and asserts via the core
+    ``InMemorySpanExporter`` that exactly one SERVER span carries the canonical
+    ``robot.action.goal_id`` + the joint/trajectory semconv + the correct result
+    status, nested under an explicit parent — 5 passed, ament lints green. The
+    carried patch is proven to **apply cleanly** (``git apply --check``) and
+    **compile** against stock ros2_controllers 4.40.1 (jazzy). The full
+    ``controller_manager`` + hardware end-to-end is deferred to on-hardware
+    ROB-435.
+
 * (robotops_trace_bt_cpp) ROB-424: first real BehaviorTree.CPP integration —
   opt-in, fork-free instrumentation that covers both Nav2 and MoveIt Pro (both
   run upstream BT.CPP), built on the ``robotops_trace_cpp`` SDK core.
