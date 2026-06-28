@@ -14,7 +14,19 @@
 
 """Smoke test: the Python mirror is importable and the key strings are exact."""
 
-import robotops_trace_semconv as semconv
+import os
+import sys
+
+# Make the test self-sufficient about locating the Python mirror. Under colcon
+# (ci.yml) the install space is on PYTHONPATH and `import robotops_trace_semconv`
+# resolves there. During the bloom/dpkg-buildpackage deb build, however, the
+# in-build pytest runs before the ament_python install space is sourced, so the
+# bare import raised ModuleNotFoundError (ROB-437). Append the in-source package
+# root as a fallback so the byte-identical source mirror is importable either
+# way; appending (not inserting) keeps the install space winning under colcon.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import robotops_trace_semconv as semconv  # noqa: E402
 
 
 def test_concept_keys_have_expected_strings():
