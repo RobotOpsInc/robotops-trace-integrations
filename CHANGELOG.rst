@@ -6,8 +6,45 @@ This monorepo contains independently-versioned packages. Each package owns its
 ``package.xml`` version; ``version-check.yml`` runs per changed package. Entries
 below are tagged with the affected package.
 
-0.2.0 (2026-06-26)
+0.2.0 (2026-06-27)
 ------------------
+
+* (robotops_trace_rclpy) ROB-423: first real rclpy integration — Python node
+  parity with the rclcpp integration, promoting the package from a stub. It
+  **monkey-patches stock rclpy at import** (``import robotops_trace_rclpy``), so
+  existing Python ROS 2 nodes get traced with no code changes and no fork. Built
+  on the ``robotops-trace`` Python SDK core and the shared
+  ``robotops_trace_semconv`` keys.
+
+  * **Action goal-UUID correlation (the deterministic, cross-language win).**
+    ``ActionClient.send_goal_async`` (and the sync ``send_goal`` that delegates to
+    it) opens a CLIENT span and ``ActionServer``'s ``execute_callback`` a SERVER
+    span, both carrying ``robot.action.goal_id`` — the canonical RFC-4122
+    8-4-4-4-12 lowercase UUID, rendered **byte-identically** to the rclcpp
+    integration's ``goal_id_to_string`` (via ``uuid.UUID(bytes=...)``). So the
+    ROB-427 agent join stitches a Python client to a C++ server (or vice versa).
+  * **Per-callback spans (executor instrumentation).** Patching
+    ``Node.create_subscription`` / ``create_timer`` / ``create_service`` /
+    ``create_client`` wraps the user callback at creation time (the clean public
+    hook — rclpy's executor dispatch is not a public seam). Each invocation opens
+    a span tagged with ``robot.callback.type``
+    (subscription/timer/service/client). Automatic on import for every node in
+    the process; nesting delegated to the SDK's contextvar current-span tracking.
+  * **Zero robot impact + idempotent patch.** Wrappers never raise into user
+    code (instrumentation errors are swallowed; user-callback errors propagate
+    untouched); transparent pass-through when the SDK is uninitialised; importing
+    twice never double-wraps (sentinel-guarded); ``uninstall()`` restores stock
+    rclpy. Span kind passed via ``kind=`` with a no-``kind`` fallback for
+    forward-compat.
+  * **Limitation:** rclpy does not surface ``rmw_message_info`` to subscription
+    callbacks, so the ``ros.publisher_gid`` / ``ros.source_timestamp`` content
+    keys the rclcpp integration emits are not available fork-free in rclpy today;
+    ``ros.topic`` / ``ros.message.type`` are emitted and the gap is documented.
+  * Verified in ``ros:jazzy`` Docker (core + semconv installed from source): a
+    pytest suite over real rclpy objects + a real ``example_interfaces/Fibonacci``
+    action round trip proves both sides emit the same canonical goal UUID. The
+    span sink is mocked (the Python SDK core is still a no-op scaffold with no
+    in-memory exporter); assertions become end-to-end once ROB-420 lands.
 
 * (robotops_trace_semconv) ROB-430: robotics semantic conventions v0 — the real
   dictionary, promoting the package from a stub to the authoritative source of
