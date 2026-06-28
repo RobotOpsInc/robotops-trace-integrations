@@ -260,10 +260,11 @@ TEST_F(Ros2ControlTraceTest, DisabledSdkIsANoOp)
   rtc::FollowJointTrajectoryTracer tracer;
   const auto uuid = make_uuid();
 
-  EXPECT_NO_THROW({
-    tracer.on_goal_accepted(uuid, make_goal(), "/c/fjt");
-    tracer.on_result(uuid, ar::kSucceeded);
-  });
+  // The helper methods are noexcept, so a disabled SDK simply degrades them to
+  // no-ops: no spans, no perturbation. (No EXPECT_NO_THROW wrapper — the noexcept
+  // contract already forbids throwing.)
+  tracer.on_goal_accepted(uuid, make_goal(), "/c/fjt");
+  tracer.on_result(uuid, ar::kSucceeded);
   EXPECT_TRUE(flush_spans().empty()) << "a disabled SDK must emit no spans";
 }
 
