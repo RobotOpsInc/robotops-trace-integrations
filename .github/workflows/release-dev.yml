@@ -62,7 +62,7 @@ jobs:
     steps:
       - id: set
         run: |
-          PACKAGES="robotops_trace_semconv robotops_trace_rclcpp robotops_trace_bt_cpp"
+          PACKAGES="robotops_trace_semconv robotops_trace_rclcpp robotops_trace_bt_cpp robotops_trace_ros2_control robotops_trace_moveit"
           echo "packages=${PACKAGES}" >> "$GITHUB_OUTPUT"
           # JSON array form for any consumer that wants it.
           JSON=$(printf '%s\n' ${PACKAGES} | jq -R . | jq -cs .)
