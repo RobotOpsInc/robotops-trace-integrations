@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>robotops_trace_moveit</name>
-  <version>0.3.0</version>
+  <version>0.3.1</version>
   <description>
     RobotOps Trace integration for MoveIt: captures the active trace context when a
     trajectory is enqueued on MoveIt's TrajectoryExecutionManager and restores it
@@ -26,13 +26,17 @@
   <depend version_gte="0.3.0">robotops_trace_cpp</depend>
   <depend version_gte="0.1.0">robotops_trace_semconv</depend>
 
-  <!-- Target framework. The carried patch wires the helper into
-       moveit_ros_planning's TrajectoryExecutionManager; moveit_core supplies the
-       trajectory/robot-model types the patched TEM uses. These are the framework
-       the patch targets (built from stock MoveIt, a build/test-only proof) — the
-       MoveIt-agnostic helper library itself does not link them. -->
-  <depend>moveit_ros_planning</depend>
-  <depend>moveit_core</depend>
+  <!-- The MoveIt-agnostic helper library declares NO MoveIt deps on purpose.
+       It includes no MoveIt header and the CMakeLists does not find_package any
+       MoveIt package, so it builds with only the trace deps above. We deliberately
+       do NOT depend on moveit_ros_planning here: the carried TEM patch (patches/)
+       is applied to stock moveit_ros_planning, and when that patched package is
+       built in the SAME colcon workspace as this helper (e.g. xarm_demo's
+       STITCH_PATCHES=1 lane), a `<depend>moveit_ros_planning</depend>` would form a
+       circular dependency (moveit_ros_planning -> robotops_trace_moveit ->
+       moveit_ros_planning) that colcon cannot topologically order. MoveIt enters
+       only via the patch, which resolves its own MoveIt deps from apt. -->
+  <!-- (none) -->
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

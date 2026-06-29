@@ -6,6 +6,19 @@ This monorepo contains independently-versioned packages. Each package owns its
 ``package.xml`` version; ``version-check.yml`` runs per changed package. Entries
 below are tagged with the affected package.
 
+0.3.1 (2026-06-29)
+------------------
+
+* (robotops_trace_moveit) Fix a colcon circular-dependency that broke the
+  ``STITCH_PATCHES=1`` source build (e.g. xarm_demo on jazzy/humble). The helper
+  is MoveIt-agnostic (no MoveIt header, no ``find_package`` of MoveIt), but its
+  ``package.xml`` still declared ``<depend>moveit_ros_planning</depend>``. When the
+  carried TEM patch is applied to stock ``moveit_ros_planning`` and built in the
+  same workspace, that dep closed a cycle (``moveit_ros_planning`` →
+  ``robotops_trace_moveit`` → ``moveit_ros_planning``) which colcon cannot order.
+  Removed the spurious ``moveit_ros_planning``/``moveit_core`` deps; MoveIt enters
+  only via the patch, which resolves its own deps from apt.
+
 0.3.0 (2026-06-28)
 ------------------
 
