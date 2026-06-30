@@ -67,6 +67,8 @@ from ._spans import (
     SPAN_KIND_CONSUMER,
     SPAN_KIND_INTERNAL,
     SPAN_KIND_SERVER,
+    STATUS_ERROR,
+    STATUS_OK,
     safe_span,
 )
 
@@ -79,6 +81,44 @@ _PATCHED = "_robotops_trace_patched"
 # Saved originals, so uninstall() can fully restore stock rclpy.
 _originals: dict[str, Any] = {}
 _installed = False
+
+# High-rate / internal ROS topics whose per-message subscription spans add only
+# noise — e.g. ``/clock`` fires at 100s/sec under sim time, swamping a single
+# trace with meaningless subscription spans. We do NOT emit subscription spans for
+# these by default. Matched on the topic's *base name* so it holds under any
+# namespace (e.g. ``/robot1/clock``). Override with
+# ``ROBOTOPS_TRACE_RCLPY_TOPIC_DENYLIST`` (comma-separated base names; an empty
+# value disables the denylist entirely and traces every topic).
+_DEFAULT_TOPIC_DENYLIST = frozenset(
+    {"clock", "tf", "tf_static", "parameter_events", "rosout"}
+)
+_topic_denylist_cache: frozenset[str] | None = None
+
+
+def _topic_denylist() -> frozenset[str]:
+    """The set of denied base names (env override read once, then cached)."""
+    global _topic_denylist_cache
+    if _topic_denylist_cache is None:
+        import os
+
+        raw = os.environ.get("ROBOTOPS_TRACE_RCLPY_TOPIC_DENYLIST")
+        if raw is None:
+            _topic_denylist_cache = _DEFAULT_TOPIC_DENYLIST
+        else:
+            _topic_denylist_cache = frozenset(
+                t.strip().strip("/").rsplit("/", 1)[-1]
+                for t in raw.split(",")
+                if t.strip()
+            )
+    return _topic_denylist_cache
+
+
+def _topic_is_denied(topic: Any) -> bool:
+    """True for high-rate/internal topics we skip subscription spans for."""
+    try:
+        return str(topic).rsplit("/", 1)[-1] in _topic_denylist()
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -152,16 +192,18 @@ def _patch_node() -> None:
     @functools.wraps(orig_create_subscription)
     def create_subscription(self, msg_type, topic, callback, *args, **kwargs):  # type: ignore[no-untyped-def]
         try:
-            callback = _wrap_callback(
-                callback,
-                f"{topic} subscription",
-                SPAN_KIND_CONSUMER,
-                {
-                    ROBOT_CALLBACK_TYPE: ROBOT_CALLBACK_TYPE_SUBSCRIPTION,
-                    ROS_TOPIC: topic,
-                    ROS_MESSAGE_TYPE: _msg_type_name(msg_type),
-                },
-            )
+            # Skip high-rate/internal topics (e.g. /clock) — they flood the trace.
+            if not _topic_is_denied(topic):
+                callback = _wrap_callback(
+                    callback,
+                    f"{topic} subscription",
+                    SPAN_KIND_CONSUMER,
+                    {
+                        ROBOT_CALLBACK_TYPE: ROBOT_CALLBACK_TYPE_SUBSCRIPTION,
+                        ROS_TOPIC: topic,
+                        ROS_MESSAGE_TYPE: _msg_type_name(msg_type),
+                    },
+                )
         except Exception:
             pass  # never block subscription creation
         return orig_create_subscription(self, msg_type, topic, callback, *args, **kwargs)
@@ -298,6 +340,26 @@ def _patch_action_server() -> None:
     _originals["ActionServer.__init__"] = orig_init
 
 
+def _set_action_status(span: Any, goal_handle: Any) -> None:
+    """Map an action's terminal ``GoalStatus`` onto the span status (zero-impact),
+    so an aborted/canceled goal renders as an ERROR span instead of UNSET. The
+    execute callback sets the goal's terminal state (``succeed``/``abort``/
+    ``canceled``) before returning, so ``goal_handle.status`` is final here.
+    """
+    try:
+        from action_msgs.msg import GoalStatus
+
+        status = getattr(goal_handle, "status", None)
+        if status == GoalStatus.STATUS_SUCCEEDED:
+            span.set_status(STATUS_OK)
+        elif status == GoalStatus.STATUS_ABORTED:
+            span.set_status(STATUS_ERROR, "goal aborted")
+        elif status == GoalStatus.STATUS_CANCELED:
+            span.set_status(STATUS_ERROR, "goal canceled")
+    except Exception:
+        pass  # never break the action server
+
+
 def _wrap_execute_callback(execute_callback: Any, action_name: str) -> Any:
     """Wrap an action ``execute_callback`` in a SERVER span carrying the goal UUID.
 
@@ -325,16 +387,20 @@ def _wrap_execute_callback(execute_callback: Any, action_name: str) -> Any:
 
         @functools.wraps(execute_callback)
         async def async_wrapper(goal_handle: Any) -> Any:
-            async with safe_span(name, SPAN_KIND_SERVER, _attrs(goal_handle)):
-                return await execute_callback(goal_handle)
+            async with safe_span(name, SPAN_KIND_SERVER, _attrs(goal_handle)) as span:
+                result = await execute_callback(goal_handle)
+                _set_action_status(span, goal_handle)
+                return result
 
         wrapper: Any = async_wrapper
     else:
 
         @functools.wraps(execute_callback)
         def sync_wrapper(goal_handle: Any) -> Any:
-            with safe_span(name, SPAN_KIND_SERVER, _attrs(goal_handle)):
-                return execute_callback(goal_handle)
+            with safe_span(name, SPAN_KIND_SERVER, _attrs(goal_handle)) as span:
+                result = execute_callback(goal_handle)
+                _set_action_status(span, goal_handle)
+                return result
 
         wrapper = sync_wrapper
 

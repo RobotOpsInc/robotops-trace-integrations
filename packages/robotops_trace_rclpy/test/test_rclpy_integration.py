@@ -335,3 +335,118 @@ def test_action_client_server_share_canonical_goal_id(ros, exporter):
     assert server_span.attributes.get(ROBOT_CALLBACK_TYPE) == ROBOT_CALLBACK_TYPE_ACTION
     assert client_span.kind == OTelSpanKind.CLIENT
     assert server_span.kind == OTelSpanKind.SERVER
+
+
+# ===========================================================================
+# Denylist: high-rate / internal topics (e.g. /clock) are NOT traced (ROB-455).
+# A /clock subscription under sim time fires 100s/sec and would swamp the trace.
+# ===========================================================================
+@_needs_sdk
+def test_denied_topics_emit_no_subscription_span(ros, exporter):
+    from std_msgs.msg import String
+
+    ran = {"clock": False, "tf": False, "ns": False}
+    with _node(ros, "denylist_test") as node:
+        s_clock = node.create_subscription(
+            String, "/clock", lambda m: ran.__setitem__("clock", True), 10
+        )
+        s_tf = node.create_subscription(
+            String, "/tf", lambda m: ran.__setitem__("tf", True), 10
+        )
+        # Matched on the base name, so it holds under a namespace too.
+        s_ns = node.create_subscription(
+            String, "/robot1/clock", lambda m: ran.__setitem__("ns", True), 10
+        )
+        for s in (s_clock, s_tf, s_ns):
+            s.callback(String())
+
+    robotops.force_flush()
+    # Zero-impact: the user callbacks still run, we just don't span them.
+    assert ran == {"clock": True, "tf": True, "ns": True}
+    for name in ("/clock subscription", "/tf subscription", "/robot1/clock subscription"):
+        assert _find(exporter, name) is None, f"{name} must not be traced"
+    # The stored callback is the RAW user callback (never wrapped).
+    assert not getattr(s_clock.callback, "_robotops_trace_patched", False)
+
+
+def test_normal_topic_is_still_traced(ros, exporter):
+    """A non-denied topic keeps its subscription span (denylist is base-name only)."""
+    from std_msgs.msg import String
+
+    with _node(ros, "clockwork_test") as node:
+        # Contains 'clock' as a substring but is NOT the /clock base name.
+        sub = node.create_subscription(String, "/clockwork", lambda m: None, 10)
+        sub.callback(String())
+
+    robotops.force_flush()
+    assert _find(exporter, "/clockwork subscription") is not None
+
+
+# ===========================================================================
+# Action result -> span status: an aborted goal renders ERROR, not UNSET (ROB-454),
+# so red-light missions are visually red. A succeeded goal renders OK.
+# ===========================================================================
+def _run_one_fibonacci(ros, exporter, terminal):
+    """Drive one Fibonacci goal whose execute callback ends with ``terminal``
+    (``'succeed'`` | ``'abort'``); return the ``action.execute`` server span."""
+    import threading
+
+    from example_interfaces.action import Fibonacci
+    from rclpy.action import ActionClient, ActionServer
+    from rclpy.executors import SingleThreadedExecutor
+
+    with _node(ros, f"action_status_{terminal}") as node:
+
+        def execute_cb(goal_handle):
+            result = Fibonacci.Result()
+            result.sequence = [0, 1, 1]
+            getattr(goal_handle, terminal)()  # goal_handle.succeed() / .abort()
+            return result
+
+        server = ActionServer(node, Fibonacci, "/fib_status", execute_cb)
+        client = ActionClient(node, Fibonacci, "/fib_status")
+        executor = SingleThreadedExecutor()
+        executor.add_node(node)
+        spin_thread = threading.Thread(target=executor.spin, daemon=True)
+        spin_thread.start()
+        try:
+            assert client.wait_for_server(timeout_sec=15), "action server not available"
+            goal = Fibonacci.Goal()
+            goal.order = 3
+            send_future = client.send_goal_async(goal)
+            deadline = time.time() + 15
+            while not send_future.done() and time.time() < deadline:
+                time.sleep(0.02)
+            goal_handle = send_future.result()
+            assert goal_handle is not None and goal_handle.accepted, "goal rejected"
+            result_future = goal_handle.get_result_async()
+            deadline = time.time() + 15
+            while not result_future.done() and time.time() < deadline:
+                time.sleep(0.02)
+            assert result_future.done(), "action result never arrived"
+        finally:
+            executor.shutdown()
+            spin_thread.join(timeout=5)
+            server.destroy()
+            client.destroy()
+
+    robotops.force_flush()
+    return _find(exporter, "action.execute")
+
+
+@_needs_sdk
+def test_action_execute_succeeded_sets_ok_status(ros, exporter):
+    from opentelemetry.trace import StatusCode as OTelStatusCode
+
+    span = _run_one_fibonacci(ros, exporter, "succeed")
+    assert span is not None, "no action.execute span"
+    assert span.status.status_code == OTelStatusCode.OK
+
+
+@_needs_sdk
+def test_action_execute_aborted_sets_error_status(ros, exporter):
+    from opentelemetry.trace import StatusCode as OTelStatusCode
+
+    span = _run_one_fibonacci(ros, exporter, "abort")
+    assert span is not None, "no action.execute span"
+    assert span.status.status_code == OTelStatusCode.ERROR

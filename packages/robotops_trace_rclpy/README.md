@@ -61,6 +61,17 @@ client → Python server) join is deterministic.
 
 The CLIENT/SERVER span kinds match the rclcpp ROB-427 direction signal.
 
+**Result → span status (ROB-454).** The server `action.execute` span's status is
+derived from the goal's terminal state — `SUCCEEDED` → **OK**, `ABORTED` /
+`CANCELED` → **ERROR** — so a failed goal renders as an error (red) span instead
+of `UNSET`. The **client** `action.goal` span is the goal *submission* (it closes
+when `send_goal_async` returns the goal-response future, before the result
+exists), so it is **not** result-statused; covering the whole goal lifetime on the
+client needs a non-current *detached-span* SDK primitive (tracked separately).
+Meanwhile a mission/orchestrator that knows its own outcome should set its own
+span status, and the agent's goal-UUID join carries the server span's error onto
+the connected trace.
+
 ## B. Per-callback spans (executor instrumentation)
 
 Patching `Node.create_*` wraps the user callback at creation time — the clean,
@@ -77,6 +88,14 @@ point). Each invocation opens a span tagged with `robot.callback.type`:
 Unlike the rclcpp integration (opt-in per callback), this is **automatic on
 import** for every node in the process — the monkey-patch covers all callbacks
 created through the standard `Node.create_*` API.
+
+**High-rate / internal topics are not traced (ROB-455).** A `/clock` subscription
+fires at 100s/sec under sim time and would swamp a trace with meaningless spans.
+By default the integration emits **no** subscription span for the base names
+`clock`, `tf`, `tf_static`, `parameter_events`, `rosout` (matched under any
+namespace, e.g. `/robot1/clock`). The user callback always still runs. Override
+with `ROBOTOPS_TRACE_RCLPY_TOPIC_DENYLIST` (comma-separated base names; an empty
+value traces every topic).
 
 Intra-process nesting (a callback span nesting under whatever span is already
 active) is delegated to the SDK's contextvar-based current-span tracking.

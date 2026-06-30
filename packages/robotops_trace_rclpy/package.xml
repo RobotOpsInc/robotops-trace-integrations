@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>robotops_trace_rclpy</name>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <description>
     RobotOps Trace integration for rclpy: monkey-patches rclpy at import so stock
     Python ROS 2 nodes get traced with no code changes and no fork — per-callback
