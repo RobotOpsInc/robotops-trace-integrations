@@ -127,8 +127,8 @@ void attach_tracer(const BT::Tree & tree) noexcept
 // Free-function ABI signatures of the (non-virtual) member functions: `this` is
 // the first argument; the by-value BT::Tree return is handled by the compiler's
 // sret convention for this exact signature, matching the member ABI.
-using RealCreate = BT::Tree (*)(BT::BehaviorTreeFactory *, const std::string &,
-    BT::Blackboard::Ptr);
+using RealCreate =
+  BT::Tree (*)(BT::BehaviorTreeFactory *, const std::string &, BT::Blackboard::Ptr);
 using RealFromText =
   BT::Tree (*)(BT::BehaviorTreeFactory *, const std::string &, BT::Blackboard::Ptr);
 using RealFromFile =
