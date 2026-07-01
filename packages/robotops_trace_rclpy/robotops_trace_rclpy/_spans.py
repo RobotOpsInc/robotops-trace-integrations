@@ -44,23 +44,29 @@ from typing import Any
 try:
     import robotops  # the RobotOps Python tracing SDK core
     from robotops import SpanKind as _SpanKind
+    from robotops import StatusCode as _StatusCode
 
     SPAN_KIND_INTERNAL: Any = _SpanKind.INTERNAL
     SPAN_KIND_SERVER: Any = _SpanKind.SERVER
     SPAN_KIND_CLIENT: Any = _SpanKind.CLIENT
     SPAN_KIND_CONSUMER: Any = _SpanKind.CONSUMER
+    STATUS_OK: Any = _StatusCode.OK
+    STATUS_ERROR: Any = _StatusCode.ERROR
 except ImportError:
     # The SDK core isn't installed. The integration then degrades to a
     # transparent pass-through; this IS part of the zero-impact contract: no SDK
     # -> no tracing, never an error.
     robotops = None  # type: ignore[assignment]
     SPAN_KIND_INTERNAL = SPAN_KIND_SERVER = SPAN_KIND_CLIENT = SPAN_KIND_CONSUMER = None
+    STATUS_OK = STATUS_ERROR = None
 
 __all__ = [
     "SPAN_KIND_INTERNAL",
     "SPAN_KIND_SERVER",
     "SPAN_KIND_CLIENT",
     "SPAN_KIND_CONSUMER",
+    "STATUS_OK",
+    "STATUS_ERROR",
     "safe_span",
 ]
 
@@ -82,22 +88,35 @@ class _SafeSpan:
     exceptions raised inside the body are propagated (never suppressed).
     """
 
-    __slots__ = ("_cm",)
+    __slots__ = ("_cm", "_span")
 
     def __init__(self, name: str, kind: Any, attributes: dict[str, Any]) -> None:
         self._cm: Any = None
+        self._span: Any = None
         try:
             self._cm = _open(name, kind, attributes)
         except Exception:
             self._cm = None
 
-    def __enter__(self) -> None:
+    def set_status(self, code: Any, message: str = "") -> None:
+        """Set the span's status, zero-impact. ``code`` is a ``robotops.StatusCode``
+        (e.g. ``STATUS_OK`` / ``STATUS_ERROR``); a no-op when tracing is off or the
+        SDK is absent. Never raises into the caller."""
+        if self._span is None or code is None:
+            return
+        try:
+            self._span.set_status(code, message)
+        except Exception:
+            pass
+
+    def __enter__(self) -> "_SafeSpan":
         if self._cm is not None:
             try:
-                self._cm.__enter__()
+                self._span = self._cm.__enter__()
             except Exception:
                 self._cm = None
-        return None
+                self._span = None
+        return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
         if self._cm is not None:
@@ -107,13 +126,14 @@ class _SafeSpan:
                 pass
         return False  # never suppress a user-callback exception
 
-    async def __aenter__(self) -> None:
+    async def __aenter__(self) -> "_SafeSpan":
         if self._cm is not None:
             try:
-                await self._cm.__aenter__()
+                self._span = await self._cm.__aenter__()
             except Exception:
                 self._cm = None
-        return None
+                self._span = None
+        return self
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
         if self._cm is not None:

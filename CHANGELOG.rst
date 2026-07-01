@@ -6,6 +6,30 @@ This monorepo contains independently-versioned packages. Each package owns its
 ``package.xml`` version; ``version-check.yml`` runs per changed package. Entries
 below are tagged with the affected package.
 
+Unreleased
+----------
+
+* (robotops_trace_rclpy 0.3.0) ROB-454 / ROB-455 — trace-quality fixes surfaced by
+  the turtlebot_demo Nav2 missions.
+
+  * **ROB-455 — high-rate/internal topic denylist.** Stop emitting a subscription
+    span per ``/clock`` callback (100s/sec under sim time, which swamped the
+    trace). By default no subscription span is created for the base names
+    ``clock``, ``tf``, ``tf_static``, ``parameter_events``, ``rosout`` (matched
+    under any namespace). Override with ``ROBOTOPS_TRACE_RCLPY_TOPIC_DENYLIST``
+    (comma-separated base names; empty traces everything). The user callback
+    always still runs.
+  * **ROB-454 — action result → span status.** The server ``action.execute`` span
+    now derives its status from the goal's terminal ``GoalStatus`` —
+    ``SUCCEEDED`` → OK, ``ABORTED``/``CANCELED`` → ERROR — so a failed goal renders
+    as an error (red) span instead of UNSET. (``_spans.safe_span`` now exposes a
+    zero-impact ``set_status``.) The **client** ``action.goal`` span is the goal
+    *submission* and is not result-statused; a goal-lifetime client span needs a
+    non-current detached-span SDK primitive (tracked separately).
+  * Tests: ``/clock``/``/tf``/namespaced denial emits no span (callback still
+    runs); a normal ``/clockwork`` topic is still traced; an aborted Fibonacci
+    goal yields an ERROR ``action.execute`` span, a succeeded one OK.
+
 0.3.1 (2026-06-29)
 ------------------
 
