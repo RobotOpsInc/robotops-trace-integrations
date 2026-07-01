@@ -30,6 +30,27 @@ Unreleased
     runs); a normal ``/clockwork`` topic is still traced; an aborted Fibonacci
     goal yields an ERROR ``action.execute`` span, a succeeded one OK.
 
+* (robotops_trace_bt_cpp_autoattach 0.1.0) **NEW** — ROB-451: process-wide,
+  zero-code, fork-free auto-attach of BT tracing to **stock** BehaviorTree.CPP
+  apps, most importantly Nav2's ``bt_navigator``. An ``LD_PRELOAD`` DSO interposes
+  the three ``BT::BehaviorTreeFactory::createTree*`` methods (BT.CPP v4 mangled
+  symbols; blackboard by value), resolves the originals via
+  ``dlsym(RTLD_NEXT, …)``, and drops a ``robotops_trace_bt_cpp`` ``TreeTracer`` on
+  every built tree — heap-owned in a process registry (TreeTracer is non-movable),
+  attached at the outermost frame via a ``thread_local`` depth guard (the
+  ``FromText/FromFile`` variants re-enter ``createTree``; no ``-Bsymbolic`` on
+  libbehaviortree_cpp). Zero-robot-impact (try/caught; opt out with
+  ``ROBOTOPS_TRACE_BT_AUTOATTACH=0``). **Validated:** an ``LD_PRELOAD``ed BT app
+  with no tracing code emits nested BT-node spans (``root_seq`` → ``step_a``/
+  ``step_b`` with ``robot.component.name`` + status). BT.CPP v4/jazzy; humble (v3)
+  is a follow-up.
+
+* (robotops_trace_bt_cpp 0.3.0) Build the lib **position-independent**
+  (``POSITION_INDEPENDENT_CODE ON``) so it links into a SHARED object — required
+  by the autoattach interposer above; without it aarch64 fails with
+  ``relocation R_AARCH64_ADR_PREL_PG_HI21 … recompile with -fPIC``. (Same
+  shared-consumability need as the core's ROB-439.)
+
 0.3.1 (2026-06-29)
 ------------------
 
