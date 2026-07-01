@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(robotops_trace_bt_cpp VERSION 0.2.0 LANGUAGES CXX)
+project(robotops_trace_bt_cpp VERSION 0.3.0 LANGUAGES CXX)
 
 # ROB-424 — BehaviorTree.CPP integration: one RobotOps span per BT node
 # EXECUTION, nested by tree structure, built on the robotops_trace_cpp SDK core.
@@ -31,6 +31,12 @@ find_package(robotops_trace_cpp REQUIRED)
 find_package(robotops_trace_semconv REQUIRED)
 
 add_library(${PROJECT_NAME} src/robotops_trace_bt_cpp.cpp)
+# Position-independent so this (static) lib can be linked into a SHARED object —
+# e.g. the LD_PRELOAD interposer robotops_trace_bt_cpp_autoattach (ROB-451). Without
+# it, aarch64 fails with "relocation R_AARCH64_ADR_PREL_PG_HI21 ... recompile with
+# -fPIC" when the .a is pulled into a .so. (Same shared-consumability need as the
+# core's ROB-439.)
+set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(${PROJECT_NAME} PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include>")

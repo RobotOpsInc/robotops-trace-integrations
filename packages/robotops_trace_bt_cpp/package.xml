@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>robotops_trace_bt_cpp</name>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <description>
     RobotOps Trace integration for BehaviorTree.CPP: opt-in, fork-free
     instrumentation that emits one span per BT node EXECUTION, nested by the
