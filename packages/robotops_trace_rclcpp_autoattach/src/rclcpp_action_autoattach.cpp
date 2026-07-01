@@ -190,9 +190,13 @@ using RealPublishResult = void (*)(
 using RealGenId = rclcpp_action::GoalUUID (*)(rclcpp_action::ClientBase *);
 // ClientBase::ResponseCallback is a *protected* alias, so spell out the underlying
 // type (identical type → identical mangled symbol) to name it at namespace scope.
+// jazzy uncrustify wants `void(...)`, humble uncrustify wants `void (...)` — the two
+// disagree and whitespace doesn't affect the mangled name, so freeze this line.
+// *INDENT-OFF*
 using RealSendGoalReq = void (*)(
   rclcpp_action::ClientBase *, std::shared_ptr<void>,
   std::function<void(std::shared_ptr<void>)>);
+// *INDENT-ON*
 
 constexpr const char * kExecGRR =
   "_ZN13rclcpp_action10ServerBase29execute_goal_request_receivedEi26action_msgs__"
