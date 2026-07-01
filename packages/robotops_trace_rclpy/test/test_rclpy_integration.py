@@ -369,6 +369,7 @@ def test_denied_topics_emit_no_subscription_span(ros, exporter):
     assert not getattr(s_clock.callback, "_robotops_trace_patched", False)
 
 
+@_needs_sdk
 def test_normal_topic_is_still_traced(ros, exporter):
     """A non-denied topic keeps its subscription span (denylist is base-name only)."""
     from std_msgs.msg import String
