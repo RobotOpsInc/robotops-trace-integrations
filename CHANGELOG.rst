@@ -9,6 +9,21 @@ below are tagged with the affected package.
 Unreleased
 ----------
 
+* (robotops_trace_rclcpp_autoattach 0.1.0) **NEW** — ROB-451/ROB-453 "L3": the
+  cross-process **goal-UUID** join for STOCK Nav2, zero-fork. An ``LD_PRELOAD`` DSO
+  interposes the non-templated ``rclcpp_action`` base-class seams that carry the
+  goal-UUID — server ``ServerBase::execute_goal_request_received`` (open a detached
+  SERVER span keyed by ``GoalInfo.goal_id.uuid``) / ``publish_result`` (close);
+  client ``ClientBase::generate_goal_id`` (capture) / ``send_goal_request`` (open a
+  CLIENT span parented to the current context). Direction via ``SpanKind``
+  (Client=producer, Server=consumer); ``robot.action.goal_id`` via the shared
+  ``goal_id_to_string``. The robot-agent ``TraceJoiner`` (ROB-427) then stitches
+  ``mission → bt_navigator → planner/controller/behavior`` into one trace. Server
+  side (non-virtual) is reliably interposable; the client seams are ``virtual`` so
+  interposition depends on the vtable (works when librclcpp_action isn't
+  ``-Bsymbolic``, else fall back to the ``rcl_action`` C layer). Uses the SDK
+  ``DetachedSpan`` (ROB-443). BehaviorTree/jazzy; humble is a follow-up.
+
 * (robotops_trace_rclpy 0.3.0) ROB-454 / ROB-455 — trace-quality fixes surfaced by
   the turtlebot_demo Nav2 missions.
 

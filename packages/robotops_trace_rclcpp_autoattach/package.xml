@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>robotops_trace_rclcpp_autoattach</name>
+  <version>0.1.0</version>
+  <description>
+    Process-wide LD_PRELOAD auto-attach for stock rclcpp_action (ROB-453):
+    interposes the non-templated ServerBase/ClientBase goal-UUID seams so STOCK
+    Nav2 emits CLIENT + SERVER action spans keyed by robot.action.goal_id — the
+    agent's TraceJoiner then stitches mission -> bt_navigator -> planner/controller
+    into one connected trace, with no code changes and no fork.
+  </description>
+
+  <maintainer email="kristophm@robotops.com">Kristoph Matthews</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- SDK core (needs the DetachedSpan API, ROB-443) + the shared goal-id
+       formatter/keys, pinned to their current minors. -->
+  <depend version_gte="0.3.0">robotops_trace_cpp</depend>
+  <depend version_gte="0.1.0">robotops_trace_rclcpp</depend>
+  <depend version_gte="0.1.0">robotops_trace_semconv</depend>
+
+  <!-- Target framework: we interpose its action base classes. -->
+  <depend>rclcpp_action</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

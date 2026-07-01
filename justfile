@@ -103,6 +103,7 @@ build:
     colcon build --packages-up-to \
         robotops_trace_semconv robotops_trace_rclcpp robotops_trace_rclpy \
         robotops_trace_bt_cpp robotops_trace_bt_cpp_autoattach \
+        robotops_trace_rclcpp_autoattach \
         robotops_trace_ros2_control robotops_trace_moveit
 
 # Run colcon tests + lint (inside the container)
