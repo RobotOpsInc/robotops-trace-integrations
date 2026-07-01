@@ -46,11 +46,6 @@
 // Humble Nav2 uses BT.CPP v3 (a different include root + mangled names) — a v3
 // build is a separate follow-up.
 
-#include <behaviortree_cpp/bt_factory.h>
-
-#include <robotops_trace_bt_cpp/robotops_trace_bt_cpp.hpp>
-#include <robotops_trace/trace.hpp>
-
 #include <dlfcn.h>
 
 #include <cstdlib>
@@ -60,6 +55,11 @@
 #include <mutex>
 #include <string>
 #include <vector>
+
+#include <behaviortree_cpp/bt_factory.h>  // NOLINT(build/include_order): .h, not a C header
+
+#include <robotops_trace_bt_cpp/robotops_trace_bt_cpp.hpp>
+#include <robotops_trace/trace.hpp>
 
 namespace
 {
@@ -127,7 +127,8 @@ void attach_tracer(const BT::Tree & tree) noexcept
 // Free-function ABI signatures of the (non-virtual) member functions: `this` is
 // the first argument; the by-value BT::Tree return is handled by the compiler's
 // sret convention for this exact signature, matching the member ABI.
-using RealCreate = BT::Tree (*)(BT::BehaviorTreeFactory *, const std::string &, BT::Blackboard::Ptr);
+using RealCreate = BT::Tree (*)(BT::BehaviorTreeFactory *, const std::string &,
+    BT::Blackboard::Ptr);
 using RealFromText =
   BT::Tree (*)(BT::BehaviorTreeFactory *, const std::string &, BT::Blackboard::Ptr);
 using RealFromFile =
