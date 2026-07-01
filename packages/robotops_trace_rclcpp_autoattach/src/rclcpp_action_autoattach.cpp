@@ -216,12 +216,22 @@ void ServerBase::execute_goal_request_received(
   std::shared_ptr<void> message)
 {
   static const auto real = reinterpret_cast<RealExecGRR>(::dlsym(RTLD_NEXT, kExecGRR));
+  // The `goal_info` argument is NOT yet populated at this seam (empty UUID). The
+  // goal-UUID is the first field (offset 0) of the SendGoal request `message` —
+  // rosidl's universal action layout is `{ UUID goal_id; Goal goal; }`, and the
+  // request object is at least 16 bytes — so read the 16 bytes there.
+  GoalUUID uuid{};
+  bool have_uuid = false;
+  if (message) {
+    std::memcpy(uuid.data(), message.get(), uuid.size());
+    have_uuid = true;
+  }
   if (real) {
     real(this, ret, goal_info, request_header, message);
   }
-  GoalUUID uuid{};
-  std::memcpy(uuid.data(), goal_info.goal_id.uuid, uuid.size());
-  open_server_span(uuid);
+  if (have_uuid) {
+    open_server_span(uuid);
+  }
 }
 
 void ServerBase::publish_result(const GoalUUID & uuid, std::shared_ptr<void> result_msg)
